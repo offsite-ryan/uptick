@@ -1742,8 +1742,8 @@
                             <th>Endpoint</th>
                         </tr>
                         <tr>
-                            <td>Series</td>
-                            <td>GET {activeSymbolSourceUrl}/{symbol}/{timeframe}/{startISO}/{endISO}</td>
+                            <td>Series (Primary)</td>
+                            <td>GET {activeSymbolSourceUrl}/symbols/{symbol}/{timeframe}/{startISO}/{endISO}</td>
                         </tr>
                         <tr>
                             <td>Account</td>
@@ -1785,6 +1785,14 @@
                         written into the app's source.</p>
                 </div>
                 <div class="help-section">
+                    <p class="help-heading">Watchlist</p>
+                    <p class="help-desc">Adding a symbol that's already on the watchlist updates its name in place
+                        instead of adding a duplicate — same pattern symbol groups already use when saved under an
+                        existing name. Meant for adding a symbol quickly by ticker alone, then coming back later to fill
+                        in the full name once it's confirmed worth keeping, without needing to remove and re-add it
+                        (which would also have lost its position in the list).</p>
+                </div>
+                <div class="help-section">
                     <p class="help-heading">Today &amp; Positions</p>
                     <p class="help-desc"><b>Today</b> comes from the account resource's <code>equity</code> and
                         <code>last_equity</code> fields (today's change = equity − last_equity) — the account-level
@@ -1796,6 +1804,14 @@
                     <p class="help-desc">Account equity and buying power also show as small blue text next to the clock,
                         above the stat cards — reads "-" for either in Sample mode, since there's no real account behind
                         it to report on.</p>
+                    <p class="help-desc"><b>Positions table</b> lists every bolt-enabled symbol, not just currently-held
+                        ones — a symbol waiting for its own confirming signal still shows a row, with its
+                        position-specific columns collapsed to "–" until it's actually bought. The <b>Bot</b> column
+                        reflects what the automated evaluator most recently decided for that symbol: <b>WAIT</b> (armed
+                        but no signal yet), <b>HELD</b> (correctly holding), <b>CAP</b> (sold or blocked — day cap, max
+                        loss, or a state-based sell), <b>IDLE</b> (outside the configured buy window entirely). Only
+                        ever populated on whichever device is actually running the evaluator; the same status also
+                        appears as a small badge on each symbol's own Compare tile.</p>
                 </div>
                 <div class="help-section">
                     <p class="help-heading">Buy/Sell buttons</p>
@@ -1914,18 +1930,24 @@
                     <p class="help-desc">The cap fields themselves turn amber in Settings while a real cap trigger is
                         currently locking out new buys. The routine end-of-day close uses this same lockout mechanism,
                         but that's normal daily behavior and isn't flagged the same way.</p>
-                    <p class="help-desc"><b>Gain Pause (%)</b> — a different kind of protection than the caps above: not
-                        a lockout, and not tied to a fixed dollar figure. Once the Positions card's own combined gain
-                        across everything currently held reaches this percentage, every bolt-enabled held position sells
-                        — but new buying isn't blocked for the rest of the day the way a cap trip blocks it. Instead,
-                        each symbol requires its own fresh, genuine closed red bar (same rule Start HMM itself already
-                        uses) before the bot will buy back in. Blank or 0 disables it entirely.</p>
+                    <p class="help-desc"><b>Gain Pause — neg / pos (%)</b> — a different kind of protection than the
+                        caps above: not a lockout, and not tied to a fixed dollar figure. Two independent thresholds,
+                        either usable alone. Once the Positions card's own combined gain across everything currently
+                        held reaches the positive side, or drops to the negative side, every bolt-enabled held position
+                        sells — but new buying isn't blocked for the rest of the day the way a cap trip blocks it.
+                        Instead, each symbol requires its own fresh, genuine closed red bar (same rule Start HMM itself
+                        already uses) before the bot will buy back in. Either field left blank disables that direction;
+                        the negative field is entered as a real signed number (e.g. -0.5), not a magnitude.</p>
                     <ul class="help-desc">
-                        <li>Can fire more than once in a single day — each time, positions fully close out, the combined
-                            gain resets to exactly 0%, and every symbol needs a real new confirming move before
-                            re-entry, not just a bounce back toward the same line</li>
-                        <li>Checked against whatever's currently held, regardless of how that gain built up — a handful
-                            of symbols moving together or just one large move both count the same way</li>
+                        <li>The negative side exists because a broad decline across several positions can sit under
+                            every individual position's own Max Loss threshold — each one a little short of tripping on
+                            its own — while still adding up to a real, meaningful account-level loss worth reacting to
+                        </li>
+                        <li>Can fire more than once in a single day, in either direction — each time, positions fully
+                            close out, the combined gain resets to exactly 0%, and every symbol needs a real new
+                            confirming move before re-entry, not just a bounce back toward the same line</li>
+                        <li>Checked against whatever's currently held, regardless of how that gain or loss built up — a
+                            handful of symbols moving together or just one large move both count the same way</li>
                         <li>The account's own real day caps are still checked first and always win — if a cap trips in
                             the same moment Gain Pause would have fired, the cap's own full lockout takes precedence
                         </li>
@@ -1981,8 +2003,8 @@
                 <input type="text" id="settingsSymbolUrlA" class="edit-select"
                     placeholder="https://your-market-data-api.example.com" style="margin-bottom:8px;">
                 <p class="field-label">Token</p>
-                <input type="email" id="settingsSymbolToken" class="edit-select" placeholder="you@example.com"
-                    style="margin-bottom:8px;">
+                <input type="text" id="settingsSymbolToken" class="edit-select" placeholder="your-token"
+                    autocomplete="off" style="margin-bottom:8px;">
                 <p class="metric-sub" style="margin:-10px 0 16px;">Enter your provided token</p>
                 <p class="field-label">Backup symbol data URL</p>
                 <input type="text" id="settingsSymbolUrlB" class="edit-select"
@@ -2165,9 +2187,17 @@
                             min="-1000" max="1000" step="5"></td>
                 </tr>
                 <tr>
-                    <td>Gain Pause (%) — sells everything, requires a fresh red bar to re-enter; blank/0 disables</td>
-                    <td style="text-align:right;"><input type="number" id="autoTradeGainPausePct" class="edit-input"
-                            min="0" step="0.05"></td>
+                    <td>Gain Pause — neg / pos (%) — sells everything and requires a fresh red bar to re-enter; either
+                        side blank disables that direction</td>
+                    <td style="text-align:right;">
+                        <div style="display:flex; gap:6px; justify-content:flex-end;">
+                            <input type="number" id="autoTradeGainPauseNegPct" class="edit-input" max="0" step="0.05"
+                                style="width:70px;"
+                                title="Negative side — entered as a real signed number (e.g. -0.5), used exactly as typed">
+                            <input type="number" id="autoTradeGainPausePct" class="edit-input" min="0" step="0.05"
+                                style="width:70px;" title="Positive side">
+                        </div>
+                    </td>
                 </tr>
                 <tr>
                     <td>Trailing (%) — not active yet</td>
@@ -2337,7 +2367,7 @@
                 <a href="#" id="resetSavedData"
                     style="color:var(--muted); text-decoration:underline; margin-left:6px;">Reset saved data</a>
             </p>
-            <p style="color:var(--muted); font-size:11px; margin-top:6px;">V098</p>
+            <p style="color:var(--muted); font-size:11px; margin-top:6px;">V102</p>
         </div>
     </div>
 
@@ -2449,6 +2479,15 @@
                 // fully liquidate, positionsPct genuinely resets to exactly 0%, so there's no whipsaw risk
                 // right at the threshold the way there might be with a value that never actually zeroes out.
                 gainPausePct: NaN,
+                // Same mechanism as gainPausePct above, mirrored for the negative side — a broad decline
+                // across several positions can sit under every individual position's own max-loss
+                // threshold (each one short of -0.5% alone) while still representing a real, meaningful
+                // aggregate loss worth reacting to. Entered as a real signed number directly (e.g. -0.5),
+                // used exactly as typed — deliberately NOT the deadband's own "positive magnitude,
+                // negated internally" convention, since that inconsistency is its own separate, deferred
+                // item on the list. NaN means disabled — this side is fully independent of the positive
+                // side; either can be set without the other.
+                gainPauseNegPct: NaN,
                 // HMM value (same units/shape as startHmm), not a full timestamp — combined via
                 // Math.max(startHmm, lastGainPauseHmm || 0) at the point of the per-symbol re-arm check,
                 // so a Gain Pause trigger later in the day simply raises the effective floor beyond
@@ -2461,6 +2500,18 @@
             }
         };
 
+        // Settings sync exclusion lists — read this before adding any new field to CONFIG.api or
+        // CONFIG.autoTrading above: if it's a credential, a URL that could reveal where the backend
+        // lives, or device-specific activation state, add it here too, or it will be sent to the sync
+        // server by default. Same reasoning throughout: symbolToken is the sync credential itself
+        // (can't sync itself); the three URLs are excluded for the same "no default value, don't want
+        // it discoverable on a server" reasoning accountBaseUrl already had; masterEnabled/day-cap
+        // lockout state match Import's own existing "device-specific, reset for safety" convention.
+        // autoTradeEnabledIds is deliberately NOT excluded — the user wants to see, on any device,
+        // exactly which symbols the bot is currently acting on, even a device that never trades.
+        const SETTINGS_SYNC_EXCLUDE_API_FIELDS = ["symbolToken", "symbolBaseUrlA", "symbolBaseUrlB", "accountBaseUrl", "accountApiKey", "accountApiSecret"];
+        const SETTINGS_SYNC_EXCLUDE_AUTOTRADING_FIELDS = ["masterEnabled", "dayCapLockoutActive", "dayCapLockoutSessionKey"];
+
         const SETTINGS_KEY = "uptick-settings-v1";
         // Deliberately its own separate key, not folded into SETTINGS_KEY — that blob gets rewritten
         // on nearly every small settings change, and Export/Import moves it between devices; a
@@ -2471,6 +2522,16 @@
         const JOURNAL_KEY = "uptick-journal-v1";
         let journalEntries = {}; // read once at load, same pattern as CONFIG itself — only ever
         // written back to localStorage on an explicit save, never on every keystroke
+        // Tracks whether the LAST local save's own sync attempt actually succeeded — separate from
+        // whether the save itself succeeded, which always does (localStorage never depends on
+        // connectivity). null = sync isn't configured at all (nothing to track); true = last save
+        // synced; false = last save's PUT failed or never completed. Purely in-memory, no persistence
+        // of this status itself needed — a fresh page load already re-attempts sync on its own.
+        // Deliberately no auto-retry, no connectivity listeners: a mobile browser tab is commonly
+        // suspended once the phone locks or the app is backgrounded, so a background listener
+        // wouldn't reliably fire anyway. The person notices the indicator next time the app is
+        // actually open, and manually re-saves once they have signal.
+        let journalLastSaveSynced = null;
 
         function loadJournal() {
             try {
@@ -2483,8 +2544,98 @@
             try {
                 localStorage.setItem(JOURNAL_KEY, JSON.stringify(journalEntries));
             } catch (e) { console.warn("Could not save journal:", e); }
+            // Fire-and-forget — the local save above already succeeded regardless of whether this
+            // does. Deliberately not awaited here: saveJournal() itself stays synchronous, matching
+            // every existing call site's own expectation that it completes immediately.
+            putJournalToServer();
         }
         journalEntries = loadJournal();
+
+        // Sync is enabled only when BOTH fields already used for symbol data have real values — no
+        // new Settings fields at all. Same symbolToken, used two different ways depending on the
+        // endpoint: ?token= for symbol-data fetches (unchanged, untouched), a raw path segment here.
+        function journalSyncEnabled() {
+            return !!(CONFIG.api.symbolBaseUrlA && CONFIG.api.symbolToken);
+        }
+        function journalSyncUrl() {
+            return `${CONFIG.api.symbolBaseUrlA.replace(/\/$/, "")}/data/uptick/${encodeURIComponent(CONFIG.api.symbolToken)}/journal`;
+        }
+
+        // Fetch-on-load. Fail-safe throughout — matches the same never-throw, resolve-quietly
+        // philosophy already proven in bitemap's own fetchRemoteJson/putRemoteJson: a network error,
+        // an empty response, or a malformed payload all just mean "keep whatever's already local,"
+        // never an error surfaced to the person or a blocked render. Runs in the background, not
+        // blocking the app's own initial render at all — if/when it resolves with real data, it
+        // re-renders the Journal section only if that section is actually on screen right now.
+        // "Not yet synced" visual status is deliberately NOT part of this first pass — kept separate,
+        // to verify the basic fetch/PUT mechanism works on its own before adding that layer on top.
+        async function fetchJournalFromServer() {
+            if (!journalSyncEnabled()) return;
+            try {
+                const res = await fetch(journalSyncUrl());
+                if (!res.ok) { console.log("[Journal sync] fetch failed:", res.status); return; }
+                const text = await res.text();
+                if (!text) return; // truly empty response body — keep local as-is
+                const parsed = JSON.parse(text);
+                if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return; // malformed — keep local as-is
+                // An empty object ({}, no keys at all) is what the server's own GET handler returns
+                // whenever nothing has ever been PUT for this token yet — a valid, successful response,
+                // not a failure, but NOT the same thing as "the server deliberately holds zero entries"
+                // either, since both look identical from here. There's no way to tell those two cases
+                // apart from an empty response alone, so the safe rule (confirmed live: the very first
+                // sync silently cleared a real, existing local journal) is that an empty server response
+                // never overwrites non-empty local data — only a server response that genuinely has at
+                // least one real entry ever replaces what's already here.
+                if (Object.keys(parsed).length === 0 && Object.keys(journalEntries).length > 0) return;
+                journalEntries = parsed;
+                const container = document.getElementById("accountJournalBody");
+                if (container) renderJournal(container);
+                const echoContainer = document.getElementById("positionsJournalEcho");
+                if (echoContainer) renderPositionsJournalEcho();
+            } catch (err) {
+                console.log("[Journal sync] fetch failed:", err.message);
+            }
+        }
+
+        // PUT-on-save. Same fail-safe principle — called from inside saveJournal() itself, after the
+        // local save has already succeeded, so a failed sync never means a lost note.
+        async function putJournalToServer() {
+            if (!journalSyncEnabled()) { journalLastSaveSynced = null; updateJournalSyncIndicator(); return; }
+            try {
+                const res = await fetch(journalSyncUrl(), {
+                    method: "PUT",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify(journalEntries)
+                });
+                journalLastSaveSynced = res.ok;
+                if (!res.ok) console.log("[Journal sync] PUT failed:", res.status);
+            } catch (err) {
+                journalLastSaveSynced = false;
+                console.log("[Journal sync] PUT failed:", err.message);
+            }
+            // Updates a small, dedicated indicator element directly — deliberately NOT a call to the
+            // full renderJournal(), which rebuilds the entire section including today's own textarea.
+            // Since this resolves asynchronously, a full re-render at this exact moment could destroy
+            // an in-progress edit if the person is still typing when the PUT finally completes — same
+            // class of bug already caught and fixed once tonight with the periodic refresh timer.
+            updateJournalSyncIndicator();
+        }
+
+        // Small, standalone indicator — only shown when sync is actually configured AND the last
+        // save's own sync attempt failed. Deliberately no auto-retry, no connectivity listener: the
+        // person notices this next time the app is open and manually re-saves once they have signal.
+        // Safe to call at any time, including mid-edit, since it only ever touches this one small
+        // element — never the textarea or the rest of the Journal section.
+        function updateJournalSyncIndicator() {
+            const el = document.getElementById("journalSyncIndicator");
+            if (!el) return;
+            el.style.display = (journalLastSaveSynced === false) ? "" : "none";
+        }
+        // fetchJournalFromServer() is kicked off after applySavedSettings() below, not here — it
+        // needs CONFIG.api.symbolBaseUrlA/symbolToken already restored from localStorage first, or
+        // journalSyncEnabled() would always see the still-default empty strings and skip the fetch
+        // even for a user with real sync settings already saved. A real ordering bug caught before
+        // shipping, not a stylistic choice — confirmed by tracing the actual script execution order.
 
         // Local date components, not toISOString() — that's always UTC, which can silently land on
         // the wrong calendar day once rendered in a negative-UTC-offset timezone like US Eastern.
@@ -2536,6 +2687,14 @@
         // selectedTickerIds' own pattern, rather than nested inside CONFIG.autoTrading — this is
         // "which tickers" state, not a general setting.
         let autoTradeEnabledIds = new Set();
+        // Per-symbol bot status — "row 1" of the Positions view's own account-status cards. Purely
+        // in-memory, session-only, never persisted — a live snapshot of what the evaluator's own
+        // per-symbol loop decided most recently, updated right alongside each existing console.log
+        // decision point rather than duplicating or reworking that logic. Keyed by symbol.
+        let botStatusBySymbol = {};
+        function recordBotStatus(symbol, state, color) {
+            botStatusBySymbol[symbol] = { state, color, updatedAt: Date.now() };
+        }
         let tickerPresets = []; // [{ id, name, tickerIds: [...] }] — named snapshots of selectedTickerIds, not separate ticker lists. The master roster (TICKERS) is untouched by any of this; switching a preset only changes which of your existing tickers are checked.
         let heldPositions = new Map(); // symbol -> { dollar, pct } unrealized gain, from the live positions array — empty in Sample mode, no fabricated demo data
         let lastPositionDollars = new Map(); // symbol -> previous refresh's dollar gain, captured right before heldPositions gets overwritten — feeds the Positions table's per-row Delta column
@@ -2545,7 +2704,7 @@
         // check below has already run for — initialized to the CURRENT session at script-load time
         // (not null) specifically so it doesn't fire immediately on every page load, only when the
         // boundary is genuinely crossed while the app is already open and running.
-        let lastViewForceSessionKey = getSessionWindow().sessionStart.getTime();
+        let lastViewForceSessionKey = getReal4amBoundaryToday();
         let selectedDateSetAt = null; // timestamp of when selectedDate was last set to a real (non-null) date — distinct from lastActivityTime, which updates on ANY click. Drives the 4am reset below: if today's real 4am boundary has passed since this timestamp, a historical date left selected overnight (even with the app otherwise active, so the 60-minute inactivity check alone wouldn't catch it) gets cleared for the new trading day.
         // Governs whether renderActivitySummary() actually does anything the next time it's called.
         // Starts true so the very first visit to Positions loads real data. Without this, the
@@ -2644,38 +2803,122 @@
                 return raw ? JSON.parse(raw) : null;
             } catch (e) { return null; }
         }
+        // Extracted from saveSettings() itself so both the local-storage save AND the settings-sync
+        // payload builder below share one single source of truth for "what's in the settings blob" —
+        // avoids two separate copies of this same object shape quietly drifting apart over time.
+        function buildSettingsObject() {
+            return {
+                dataMode: CONFIG.dataMode,
+                calculator: CONFIG.calculator,
+                symbolBaseUrlA: CONFIG.api.symbolBaseUrlA,
+                symbolToken: CONFIG.api.symbolToken,
+                symbolBaseUrlB: CONFIG.api.symbolBaseUrlB,
+                activeSymbolSource: CONFIG.api.activeSymbolSource,
+                accountBaseUrl: CONFIG.api.accountBaseUrl,
+                accountMinStartDate: CONFIG.api.accountMinStartDate,
+                accountDailyTargetDollars: CONFIG.api.accountDailyTargetDollars,
+                accountApiKey: CONFIG.api.accountApiKey,
+                accountApiSecret: CONFIG.api.accountApiSecret,
+                smaPeriod: CONFIG.smaPeriod,
+                chartRefreshSeconds: CONFIG.chartRefreshSeconds,
+                accountRefreshSeconds: CONFIG.accountRefreshSeconds,
+                autoTrading: CONFIG.autoTrading,
+                tickers: TICKERS.map(t => ({ id: t.id, symbol: t.symbol, name: t.name })),
+                selectedTickerIds: [...selectedTickerIds],
+                autoTradeEnabledIds: [...autoTradeEnabledIds],
+                tickerPresets,
+                currentTf,
+                currentView,
+                displayWindow,
+                controlsExpanded,
+                statsRowExpanded
+            };
+        }
         function saveSettings() {
             try {
-                localStorage.setItem(SETTINGS_KEY, JSON.stringify({
-                    dataMode: CONFIG.dataMode,
-                    calculator: CONFIG.calculator,
-                    symbolBaseUrlA: CONFIG.api.symbolBaseUrlA,
-                    symbolToken: CONFIG.api.symbolToken,
-                    symbolBaseUrlB: CONFIG.api.symbolBaseUrlB,
-                    activeSymbolSource: CONFIG.api.activeSymbolSource,
-                    accountBaseUrl: CONFIG.api.accountBaseUrl,
-                    accountMinStartDate: CONFIG.api.accountMinStartDate,
-                    accountDailyTargetDollars: CONFIG.api.accountDailyTargetDollars,
-                    accountApiKey: CONFIG.api.accountApiKey,
-                    accountApiSecret: CONFIG.api.accountApiSecret,
-                    smaPeriod: CONFIG.smaPeriod,
-                    chartRefreshSeconds: CONFIG.chartRefreshSeconds,
-                    accountRefreshSeconds: CONFIG.accountRefreshSeconds,
-                    autoTrading: CONFIG.autoTrading,
-                    tickers: TICKERS.map(t => ({ id: t.id, symbol: t.symbol, name: t.name })),
-                    selectedTickerIds: [...selectedTickerIds],
-                    autoTradeEnabledIds: [...autoTradeEnabledIds],
-                    tickerPresets,
-                    currentTf,
-                    currentView,
-                    displayWindow,
-                    controlsExpanded,
-                    statsRowExpanded
-                }));
+                localStorage.setItem(SETTINGS_KEY, JSON.stringify(buildSettingsObject()));
             } catch (e) { console.warn("Could not save settings:", e); }
+            // Fire-and-forget, same pattern as Journal's own saveJournal() — the local save above
+            // already succeeded regardless of whether this does.
+            putSettingsToServer();
         }
-        (function applySavedSettings() {
-            const saved = loadSettings();
+
+        // Same URL/token reuse as Journal sync — CONFIG.api.symbolBaseUrlA and symbolToken, no
+        // separate settings-sync fields. Enabled only when both have real values.
+        function settingsSyncEnabled() {
+            return !!(CONFIG.api.symbolBaseUrlA && CONFIG.api.symbolToken);
+        }
+        function settingsSyncUrl() {
+            return `${CONFIG.api.symbolBaseUrlA.replace(/\/$/, "")}/data/uptick/${encodeURIComponent(CONFIG.api.symbolToken)}/settings`;
+        }
+        // Starts from the exact same object buildSettingsObject() already produces for localStorage,
+        // then strips exactly what SETTINGS_SYNC_EXCLUDE_API_FIELDS/AUTOTRADING_FIELDS name — one
+        // source of truth for "what's in settings," with sync only ever narrowing it, never
+        // maintaining a separate, independently-drifting list of what to include.
+        function buildSettingsSyncPayload() {
+            const obj = buildSettingsObject();
+            for (const field of SETTINGS_SYNC_EXCLUDE_API_FIELDS) delete obj[field];
+            const autoTrading = { ...obj.autoTrading };
+            for (const field of SETTINGS_SYNC_EXCLUDE_AUTOTRADING_FIELDS) delete autoTrading[field];
+            obj.autoTrading = autoTrading;
+            return obj;
+        }
+
+        // Fetch-on-load — same fail-safe philosophy as Journal sync throughout. Merges via
+        // Object.assign, NOT a full replace: since excluded fields (credentials, URLs, activation
+        // state) are never present in what comes back from the server at all, a full overwrite would
+        // wipe them out locally. Object.assign only touches keys actually present in the fetched
+        // object, leaving every excluded, local-only field genuinely untouched.
+        async function fetchSettingsFromServer() {
+            if (!settingsSyncEnabled()) return;
+            try {
+                const res = await fetch(settingsSyncUrl());
+                if (!res.ok) { console.log("[Settings sync] fetch failed:", res.status); return; }
+                const text = await res.text();
+                if (!text) return;
+                const parsed = JSON.parse(text);
+                if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
+                // Same empty-response safeguard Journal sync needed after being caught live: a
+                // never-synced token's {} response must never overwrite real local settings. Checked
+                // against a genuinely meaningful field (tickers) rather than the whole object, since
+                // a legitimate sync payload always has at least a watchlist even if everything else
+                // happens to be at its defaults.
+                if ((!Array.isArray(parsed.tickers) || parsed.tickers.length === 0) && TICKERS.length > 0) return;
+                // Reuses applySettingsFrom() directly, rather than a separate Object.assign-based merge —
+                // an earlier draft of this function did exactly that (Object.assign(CONFIG.api, parsed)),
+                // which was a real bug caught before shipping: parsed is the flat, top-level payload
+                // shape (dataMode, tickers, autoTrading, etc. all at the top level, matching
+                // buildSettingsObject()'s own shape) — assigning it directly onto CONFIG.api would have
+                // dumped every unrelated field straight into the wrong object. applySettingsFrom() already
+                // has the correct, field-by-field mapping (validated, in daily use, for the local-load
+                // path) — reusing it here means there's exactly one place this mapping logic lives, not
+                // two copies that could quietly drift apart from each other over time.
+                applySettingsFrom(parsed);
+            } catch (err) {
+                console.log("[Settings sync] fetch failed:", err.message);
+            }
+        }
+
+        // PUT-on-save. Same fail-safe principle as Journal sync.
+        async function putSettingsToServer() {
+            if (!settingsSyncEnabled()) return;
+            try {
+                const res = await fetch(settingsSyncUrl(), {
+                    method: "PUT",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify(buildSettingsSyncPayload())
+                });
+                if (!res.ok) console.log("[Settings sync] PUT failed:", res.status);
+            } catch (err) {
+                console.log("[Settings sync] PUT failed:", err.message);
+            }
+        }
+
+        // Named function, not the anonymous IIFE this originally was — refactored so both the
+        // initial page-load restore AND the new settings-sync fetch below can share this exact same
+        // field-by-field mapping logic, rather than maintaining two separate copies that could drift
+        // apart from each other over time.
+        function applySettingsFrom(saved) {
             if (!saved) return;
             if (saved.dataMode === "sample" || saved.dataMode === "api") CONFIG.dataMode = saved.dataMode;
             // Individual field validation, not a blanket object assignment — JSON.stringify(NaN) becomes
@@ -2732,6 +2975,9 @@
                 // becomes null, so Number.isFinite() correctly falls back to NaN/"disabled" whenever the
                 // saved value wasn't a real number, rather than silently corrupting to 0/enabled).
                 CONFIG.autoTrading.gainPausePct = Number.isFinite(at.gainPausePct) ? Math.max(0, at.gainPausePct) : NaN;
+                // Entered and stored as a real signed number directly — no Math.max clamp toward zero
+                // the way the positive side has, since this side is explicitly meant to accept negatives.
+                CONFIG.autoTrading.gainPauseNegPct = Number.isFinite(at.gainPauseNegPct) ? Math.min(0, at.gainPauseNegPct) : NaN;
                 if (Number.isFinite(at.lastGainPauseHmm)) CONFIG.autoTrading.lastGainPauseHmm = at.lastGainPauseHmm;
                 if (Number.isFinite(at.lastGainPauseSessionKey)) CONFIG.autoTrading.lastGainPauseSessionKey = at.lastGainPauseSessionKey;
                 if (at.previousClosePrices && typeof at.previousClosePrices === "object" && !Array.isArray(at.previousClosePrices)) {
@@ -2767,7 +3013,15 @@
             if (["full", "regular", "last6h"].includes(saved.displayWindow)) displayWindow = saved.displayWindow;
             if (typeof saved.controlsExpanded === "boolean") controlsExpanded = saved.controlsExpanded;
             if (typeof saved.statsRowExpanded === "boolean") statsRowExpanded = saved.statsRowExpanded;
-        })();
+        }
+        applySettingsFrom(loadSettings());
+
+        fetchJournalFromServer(); // called here, not right after journalEntries = loadJournal() above
+        // — needs CONFIG.api.symbolBaseUrlA/symbolToken already restored from localStorage by
+        // applySettingsFrom() directly above, or journalSyncEnabled() would always see the
+        // still-default empty strings and skip the fetch, even with real sync settings saved.
+        fetchSettingsFromServer(); // same reasoning and same ordering requirement as Journal's own
+        // fetch above — needs the local symbolBaseUrlA/symbolToken already restored first.
 
         // =========================================================
         // Sample data generator (stand-in for CONFIG.dataMode = "api")
@@ -3106,19 +3360,30 @@
                 // on the per-symbol loop's own existing day-cap sell check the way the EOD trigger does —
                 // this sells directly, right here, as its own self-contained action. Day cap is checked
                 // first and always wins: if it just triggered above in this same cycle, this is skipped.
-                if (!CONFIG.autoTrading.dayCapLockoutActive
-                    && Number.isFinite(CONFIG.autoTrading.gainPausePct)
+                // Checks both directions independently — a broad decline across several positions can sit
+                // under every individual position's own max-loss threshold while still being a real,
+                // meaningful aggregate loss worth reacting to, same reasoning mirrored from the gain side.
+                // Both sides share the same re-arm consequence (a fresh confirmed red bar required before
+                // buying resumes), so there's only one lastGainPauseHmm/SessionKey, not two.
+                const gainPauseTriggeredPositive = Number.isFinite(CONFIG.autoTrading.gainPausePct)
                     && CONFIG.autoTrading.gainPausePct > 0
                     && Number.isFinite(accountInfo.positionsPct)
-                    && accountInfo.positionsPct >= CONFIG.autoTrading.gainPausePct) {
-                    console.log(`[AutoTrade] %cGAIN PAUSE%c — positions=${accountInfo.positionsPct.toFixed(3)}%, threshold=${CONFIG.autoTrading.gainPausePct}%. Selling every bolt-enabled held position; each symbol needs a fresh confirmed red bar before buying resumes.`, AUTOTRADE_LOG_WHITE, "");
+                    && accountInfo.positionsPct >= CONFIG.autoTrading.gainPausePct;
+                const gainPauseTriggeredNegative = Number.isFinite(CONFIG.autoTrading.gainPauseNegPct)
+                    && CONFIG.autoTrading.gainPauseNegPct < 0
+                    && Number.isFinite(accountInfo.positionsPct)
+                    && accountInfo.positionsPct <= CONFIG.autoTrading.gainPauseNegPct;
+                if (!CONFIG.autoTrading.dayCapLockoutActive && (gainPauseTriggeredPositive || gainPauseTriggeredNegative)) {
+                    const direction = gainPauseTriggeredPositive ? "gain" : "loss";
+                    const threshold = gainPauseTriggeredPositive ? CONFIG.autoTrading.gainPausePct : CONFIG.autoTrading.gainPauseNegPct;
+                    console.log(`[AutoTrade] %cGAIN PAUSE (${direction})%c — positions=${accountInfo.positionsPct.toFixed(3)}%, threshold=${threshold}%. Selling every bolt-enabled held position; each symbol needs a fresh confirmed red bar before buying resumes.`, AUTOTRADE_LOG_WHITE, "");
                     for (const id of autoTradeEnabledIds) {
                         const t = TICKERS.find(tk => tk.id === id);
                         if (!t || !freshPositions.has(t.symbol)) continue;
                         try {
                             await TradingAPI.sell(t.symbol);
                             tradedThisCycle = true;
-                            console.log(`[AutoTrade] ${t.symbol}: %cSOLD%c (Gain Pause)`, AUTOTRADE_LOG_RED, "");
+                            console.log(`[AutoTrade] ${t.symbol}: %cSOLD%c (Gain Pause, ${direction})`, AUTOTRADE_LOG_RED, "");
                         } catch (err) {
                             console.error(`[AutoTrade] ${t.symbol}: Gain Pause sell failed — no action taken.`, err);
                         }
@@ -3143,11 +3408,13 @@
                                 await TradingAPI.sell(symbol);
                                 tradedThisCycle = true;
                                 console.log(`[AutoTrade] ${symbol}: %cSOLD%c (day cap)`, AUTOTRADE_LOG_RED, "");
+                                recordBotStatus(symbol, "CAP", "#C96A6A");
                             } catch (err) {
                                 console.error(`[AutoTrade] ${symbol}: sell execution failed — no action taken.`, err);
                             }
                         } else {
                             console.log(`[AutoTrade] ${symbol}: not held, but day cap lockout is active — no new buys for the rest of today`);
+                            recordBotStatus(symbol, "CAP", "#C96A6A");
                         }
                         continue;
                     }
@@ -3172,6 +3439,7 @@
                                 await TradingAPI.sell(symbol);
                                 tradedThisCycle = true;
                                 console.log(`[AutoTrade] ${symbol}: %cSOLD%c (max loss, ${pos.pct.toFixed(2)}%)`, AUTOTRADE_LOG_RED, "");
+                                recordBotStatus(symbol, "CAP", "#C96A6A");
                             } catch (err) {
                                 console.error(`[AutoTrade] ${symbol}: sell execution failed — no action taken.`, err);
                             }
@@ -3194,6 +3462,7 @@
                         const series = await loadFreshTodaySeriesForAutoTrade(symbol);
                         if (series.close.length < 3) {
                             console.log(`[AutoTrade] ${symbol}: not enough bars yet to evaluate`);
+                            recordBotStatus(symbol, "WAIT", "#5C89B9");
                             continue;
                         }
                         const deltaPct = computePctDeltaSeries(series.close, series.sma);
@@ -3222,8 +3491,10 @@
                                 await TradingAPI.sell(symbol);
                                 tradedThisCycle = true;
                                 console.log(`[AutoTrade] ${symbol}: %cSOLD%c (state-based)`, AUTOTRADE_LOG_RED, "");
+                                recordBotStatus(symbol, "CAP", "#C96A6A");
                             } else {
                                 console.log(`[AutoTrade] ${symbol}: %cno sell%c — correctly holding`, AUTOTRADE_LOG_GREY, "");
+                                recordBotStatus(symbol, "HELD", "#F5F3EF");
                             }
                         } catch (err) {
                             console.error(`[AutoTrade] ${symbol}: sell evaluation/execution failed — no action taken.`, err);
@@ -3239,10 +3510,12 @@
                     // (that one does affect selling; these two deliberately never do). ---
                     if (CONFIG.autoTrading.manualNoBuyToday) {
                         console.log(`[AutoTrade] ${symbol}: not held, but "Buy today" is off — no new buys`);
+                        recordBotStatus(symbol, "WAIT", "#5C89B9");
                         continue;
                     }
                     if (nowHmm < CONFIG.autoTrading.startHmm || nowHmm > CONFIG.autoTrading.endHmm) {
                         console.log(`[AutoTrade] ${symbol}: not held, but outside buy window (now=${nowHmm}, window=${CONFIG.autoTrading.startHmm}-${CONFIG.autoTrading.endHmm})`);
+                        recordBotStatus(symbol, "IDLE", "#9FA8B5");
                         continue;
                     }
                     // Gain Pause raises the effective re-arm floor beyond Start HMM alone, whenever it's
@@ -3255,8 +3528,10 @@
                         const dueToGainPause = CONFIG.autoTrading.lastGainPauseHmm !== null && effectiveArmHmm > CONFIG.autoTrading.startHmm;
                         if (dueToGainPause) {
                             console.log(`[AutoTrade] ${symbol}: %cwaiting for a red bar (Gain Pause)%c — no confirmed red bar since ${effectiveArmHmm} yet, not arming, no new buys`, AUTOTRADE_LOG_WHITE, "");
+                            recordBotStatus(symbol, "WAIT", "#5C89B9");
                         } else {
                             console.log(`[AutoTrade] ${symbol}: %cbot is watching, waiting for a red bar%c — no confirmed red bar at/after Start HMM (${CONFIG.autoTrading.startHmm}) yet, not arming, no new buys`, AUTOTRADE_LOG_BLUE, "");
+                            recordBotStatus(symbol, "WAIT", "#5C89B9");
                         }
                         continue;
                     }
@@ -3280,13 +3555,16 @@
                             if (!Number.isFinite(accountInfo.buyingPower) || accountInfo.buyingPower < investAmount) {
                                 const bpDisplay = Number.isFinite(accountInfo.buyingPower) ? `$${accountInfo.buyingPower.toFixed(2)}` : "unknown";
                                 console.log(`[AutoTrade] ${symbol}: %cno buy%c — insufficient/unknown buying power (${bpDisplay} available, $${investAmount} needed)`, AUTOTRADE_LOG_GREY, "");
+                                recordBotStatus(symbol, "WAIT", "#5C89B9");
                             } else {
                                 await TradingAPI.buy(symbol, investAmount);
                                 tradedThisCycle = true;
                                 console.log(`[AutoTrade] ${symbol}: %cBOUGHT%c ($${investAmount})`, AUTOTRADE_LOG_GREEN, "");
+                                recordBotStatus(symbol, "HELD", "#F5F3EF");
                             }
                         } else {
                             console.log(`[AutoTrade] ${symbol}: %cno buy%c — correctly not owning`, AUTOTRADE_LOG_GREY, "");
+                            recordBotStatus(symbol, "WAIT", "#5C89B9");
                         }
                     } catch (err) {
                         console.error(`[AutoTrade] ${symbol}: buy evaluation/execution failed — no action taken.`, err);
@@ -3300,6 +3578,12 @@
                 // unhandled rejection silently.
                 console.error("Automated trading: unexpected error in evaluation cycle — no action taken.", err);
             }
+            // Refreshes bot-status badges on both Compare tiles and the Positions table (whichever
+            // happens to be open right now) at the end of every cycle — both are lightweight,
+            // element-only updates, not full re-renders, so safe to call unconditionally every cycle
+            // regardless of current view.
+            refreshCompareBotStatusBadges();
+            refreshPositionsBotStatusCells();
         }
 
         function mostRecentTradingDay(d) {
@@ -3329,6 +3613,23 @@
             let d = mostRecentTradingDay(effectiveToday());
             for (let i = 0; i < days; i++) d = previousTradingDay(d);
             return d;
+        }
+
+        // Today's own real 4am boundary, as a plain calendar-date calculation — deliberately
+        // independent of selectedDate entirely, unlike getSessionWindow() itself (which is
+        // selectedDate-aware by design, for the many other things it's used for: chart data, buy
+        // windows, etc.). Real, confirmed bug this fixes: the 4am view-force check below originally
+        // used getSessionWindow().sessionStart directly, which meant simply picking a historical date
+        // changed what that call returned — creating a false "session changed" mismatch against the
+        // live session captured at page load, and incorrectly re-forcing Compare/Today/Last 6H within
+        // a minute, even though no real trading-day boundary had actually passed at all. This helper
+        // answers a narrower, different question — "has today's own real 4am passed" — and nothing
+        // else, so viewing a historical date can never affect it.
+        function getReal4amBoundaryToday() {
+            const real4am = new Date();
+            real4am.setHours(4, 0, 0, 0);
+            if (new Date() < real4am) real4am.setDate(real4am.getDate() - 1); // before 4am -> still "yesterday's" boundary
+            return real4am.getTime();
         }
 
         // Simulates a real trading session: 4:00 AM – 8:00 PM. Outside that window, there's no live
@@ -3678,7 +3979,12 @@
                     } else {
                         const symbolUrl = CONFIG.api.symbolBaseUrlA;
                         if (!symbolUrl) throw new Error(`Symbol data URL not set for source A (Settings)`);
-                        let url = `${symbolUrl.replace(/\/$/, "")}/${encodeURIComponent(symbol)}/${timeframe}/${wideStart.toISOString()}/${end.toISOString()}`;
+                        // "/symbols" is hardcoded here, in the app's own code, deliberately NOT part of the
+                        // Settings value itself — keeps the Settings field a plain base domain (same shape as
+                        // accountBaseUrl already is), reusable as-is for the sync feature's own "/data/..."
+                        // calls on that identical domain. If the backend's own route structure changes again,
+                        // it's a one-line fix here, not something to remember to update in Settings too.
+                        let url = `${symbolUrl.replace(/\/$/, "")}/symbols/${encodeURIComponent(symbol)}/${timeframe}/${wideStart.toISOString()}/${end.toISOString()}`;
                         // Source A only — never appended to source B's request above. Security through
                         // obscurity, not real access control: the backend already reads ?token= but ignores
                         // it until it's populated with something checked against an allowlist server-side.
@@ -4382,7 +4688,7 @@
                         up: upDownNeutral(change)
                     }
                 ];
-                row.innerHTML = `<span id="wallClock" style="position:absolute; top:6px; right:30px; color:var(--ink); font-size:24px; font-variant-numeric:tabular-nums; white-space:nowrap; cursor:pointer;" title="Click to force a full page reload — useful on iOS home-screen apps, which can otherwise keep running a stale, cached version after a new one's been deployed"></span><span id="acctBalancePower" style="position:absolute; top:6px; left:16px; color:#5C89B9; font-size:13px; font-variant-numeric:tabular-nums; white-space:nowrap;"></span><div class="stat-row" data-count="3">` + cards.map(c => `
+                row.innerHTML = `<span id="wallClock" style="position:absolute; top:6px; right:30px; color:var(--ink); font-size:24px; font-variant-numeric:tabular-nums; white-space:nowrap; cursor:pointer;" title="Click to force a full page reload — useful on iOS home-screen apps, which can otherwise keep running a stale, cached version after a new one's been deployed"></span><span id="acctBalancePower" style="position:absolute; top:6px; left:16px; color:#5C89B9; font-size:24px; font-variant-numeric:tabular-nums; white-space:nowrap;"></span><div class="stat-row" data-count="3">` + cards.map(c => `
         <div class="stat-col"><div class="stat-card" ${c.key === "today" ? `id="todayStatCard"` : ""}${c.key === "positions" ? `id="positionsStatCard"` : ""}>
           <p class="stat-label">${c.label}</p>
           <p class="stat-value" style="${c.up === "up" ? "color:#83B573" : c.up === "down" ? "color:#C96A6A" : c.up === "neutral" ? "color:#9FA8B5" : ""}">${c.value}</p>
@@ -4630,6 +4936,29 @@
             ]);
         }
 
+        // Lightweight refresh of just the Compare tile bot-status badges — deliberately NOT a call to
+        // the full renderCompare() (which fetches chart data and could rebuild chart instances);
+        // this only ever touches the two small badge elements per tile, safe to call every cycle
+        // regardless of which view currently happens to be open, since it no-ops via the same
+        // getElementById-returns-null guard when a tile doesn't exist on screen right now.
+        function refreshCompareBotStatusBadges() {
+            for (const id of autoTradeEnabledIds) {
+                const t = TICKERS.find(tk => tk.id === id);
+                if (!t) continue;
+                const status = botStatusBySymbol[t.symbol];
+                const badge = document.getElementById(`compareBotStatusBadge-${id}`);
+                const deadbandBadge = document.getElementById(`compareDeadbandBadge-${id}`);
+                if (badge) {
+                    badge.style.display = status ? "" : "none";
+                    if (status) {
+                        badge.textContent = status.state;
+                        badge.style.color = status.color;
+                    }
+                }
+                if (deadbandBadge && status) deadbandBadge.style.display = "none"; // bot-status wins, per the same fail-safe as renderCompare() itself
+            }
+        }
+
         async function renderCompare() {
             document.getElementById("viewTitle").textContent = "Compare";
             document.getElementById("viewSub").textContent = "% change from session start, SMA and delta on the same basis, " + tfLabel();
@@ -4671,6 +5000,7 @@
           <p class="compare-tile-title" style="display:flex; align-items:baseline; justify-content:space-between; gap:8px;"><span><span class="held-dot" id="compareHeldDot-${id}" style="display:none;"></span><span id="compareTitleSym-${id}">${t.symbol}</span> <span style="color:var(--muted); font-weight:400;">${t.name || ""}</span></span><span id="compareHeldGain-${id}" style="display:none; font-weight:700; font-size:13px; white-space:nowrap;"></span></p>
           <div id="compareChart-${id}"></div>
           <span class="deadband-override-badge" id="compareDeadbandBadge-${id}" style="display:none;"></span>
+          <span class="deadband-override-badge" id="compareBotStatusBadge-${id}" style="display:none;"></span>
           <p style="text-align:right; font-size:11px; margin:0 0 4px; color:var(--muted);" id="compareTheoGain-${id}"></p>
           ${tradeButtons}
         </div>`;
@@ -4706,10 +5036,22 @@
                 // Deadband override badge — chart display only, purely informational, no click handler.
                 // Shows the actual override value, not just a generic "on" flag, since the number itself
                 // is what determines how to read the bar colors underneath it.
+                // Bot-status badge shares this exact same corner deliberately (confirmed: the two won't
+                // realistically coexist for the same symbol) — as a fail-safe should they ever both apply
+                // at once, bot-status wins and the deadband badge is hidden underneath it.
+                const botStatus = autoTradeEnabledIds.has(id) ? botStatusBySymbol[t.symbol] : null;
+                const botStatusBadge = document.getElementById(`compareBotStatusBadge-${id}`);
+                if (botStatusBadge) {
+                    botStatusBadge.style.display = botStatus ? "" : "none";
+                    if (botStatus) {
+                        botStatusBadge.textContent = botStatus.state;
+                        botStatusBadge.style.color = botStatus.color;
+                    }
+                }
                 const deadbandBadge = document.getElementById(`compareDeadbandBadge-${id}`);
                 if (deadbandBadge) {
                     const isOverridden = getDeadbandOverrideSymbols().includes(t.symbol.toUpperCase());
-                    deadbandBadge.style.display = isOverridden ? "" : "none";
+                    deadbandBadge.style.display = (isOverridden && !botStatus) ? "" : "none";
                     if (isOverridden) deadbandBadge.textContent = `Override Enabled: ${CONFIG.autoTrading.deadbandOverridePct}%`;
                 }
 
@@ -4930,7 +5272,7 @@
 
             container.insertAdjacentHTML("beforeend", `
       <div style="overflow-x:auto;">
-      <table class="data-table today-table" style="min-width:520px;">
+      <table class="data-table today-table" style="min-width:0;">
         <thead><tr>
           <th>Symbol</th>
           <th class="w3-hide-small"># Trades</th>
@@ -4988,6 +5330,53 @@
       </div>`;
         }
 
+        // Account-level bot switch status — "row 2" of the Positions view's own Stats section
+        // (already collapsible, previously always empty on this view). Deliberately separate from
+        // the per-symbol row (built next): these are account-wide, not per-symbol, and each one is
+        // already a real, live CONFIG.autoTrading field — pure display, no new state capture needed
+        // at all. Reuses the existing .stat-card component directly via renderStatCards().
+        function buildBotSwitchStatusCards() {
+            const at = CONFIG.autoTrading;
+            const buyTodayOn = !at.manualNoBuyToday;
+            let dayCapValue = "Clear", dayCapColor = "#83B573";
+            if (at.dayCapLockoutActive) {
+                const reasonLabel = at.dayCapLockoutReason === "gain" ? "Gain" : at.dayCapLockoutReason === "loss" ? "Loss" : "EOD";
+                dayCapValue = `Locked (${reasonLabel})`;
+                dayCapColor = "#C96A6A";
+            }
+            let gainPauseValue = "Not fired today", gainPauseColor = "#9FA8B5";
+            if (Number.isFinite(at.lastGainPauseHmm)) {
+                const h = Math.floor(at.lastGainPauseHmm / 100), m = at.lastGainPauseHmm % 100;
+                const period = h >= 12 ? "PM" : "AM";
+                const h12 = h % 12 === 0 ? 12 : h % 12;
+                gainPauseValue = `Fired ${h12}:${String(m).padStart(2, "0")} ${period}`;
+                gainPauseColor = "#F5A623";
+            }
+            return [
+                { label: "Automated Trading", value: at.masterEnabled ? "ON" : "OFF", color: at.masterEnabled ? "#83B573" : "#9FA8B5" },
+                { label: "Buy Today", value: buyTodayOn ? "ON" : "OFF", color: buyTodayOn ? "#83B573" : "#C96A6A" },
+                { label: "Day Cap", value: dayCapValue, color: dayCapColor },
+                { label: "Gain Pause", value: gainPauseValue, color: gainPauseColor }
+            ];
+        }
+
+        // Per-symbol bot status, shown as a column in the Positions table itself now (not a separate
+        // cards row above it — that took up too much space and duplicated the same information).
+        // Lightweight, targeted refresh — only touches each row's own small bot-status cell by id,
+        // not a full renderPositions() re-render, so it's cheap and safe to call every evaluator
+        // cycle regardless of which view currently happens to be open.
+        function refreshPositionsBotStatusCells() {
+            for (const id of autoTradeEnabledIds) {
+                const t = TICKERS.find(tk => tk.id === id);
+                if (!t) continue;
+                const cell = document.getElementById(`posBotStatus-${id}`);
+                if (!cell) continue;
+                const status = botStatusBySymbol[t.symbol];
+                cell.textContent = status ? status.state : "—";
+                cell.style.color = status ? status.color : "#9FA8B5";
+            }
+        }
+
         async function renderPositions() {
             document.getElementById("viewTitle").textContent = "Positions";
             document.getElementById("viewSub").textContent = "Your current open positions, from the live positions payload";
@@ -4996,27 +5385,35 @@
             renderActivitySummary(); // fire-and-forget — independent of currently-held positions, so it
             // still shows today's completed activity even if everything already closed out
 
-            if (heldPositions.size === 0) {
-                panel.innerHTML = "<p class='metric-sub'>No open positions.</p>";
-                renderStatCards([]);
+            // One unified table: every bolt-enabled symbol, held or not — not just currently-held
+            // positions. Strictly bolt-enabled, deliberately not a union with all held positions: a
+            // manually-bought position outside the bot's own control is an accepted, rare edge case,
+            // not something this table is designed to also surface. Alphabetical order (not held-first)
+            // — reasonable at the current watchlist size (a handful of symbols), worth revisiting only
+            // if the list ever grows enough that scanning alphabetically stops being fast.
+            const botSymbols = [...autoTradeEnabledIds]
+                .map(id => TICKERS.find(t => t.id === id))
+                .filter(Boolean)
+                .sort((a, b) => a.symbol.localeCompare(b.symbol));
+
+            if (botSymbols.length === 0) {
+                panel.innerHTML = "<p class='metric-sub'>No symbols are bolt-enabled.</p>";
+                renderStatCards(buildBotSwitchStatusCards());
                 return;
             }
 
-            const rows = [...heldPositions.entries()].map(([symbol, p]) => {
-                const prevDollar = lastPositionDollars.get(symbol);
-                // null (not 0) when there's no prior refresh to compare against yet — same "no data yet"
-                // pattern the account-level CHANGE stat card already uses, not collapsed into a false
-                // "zero movement" reading for a symbol we simply haven't seen a second update for.
+            const rows = botSymbols.map(t => {
+                const p = heldPositions.get(t.symbol);
+                const status = botStatusBySymbol[t.symbol];
+                if (!p) return { id: t.id, symbol: t.symbol, held: false, status };
+                const prevDollar = lastPositionDollars.get(t.symbol);
                 const delta = prevDollar !== undefined ? p.dollar - prevDollar : null;
-                // A held symbol isn't guaranteed to be in the watchlist at all (same as the Sell button
-                // logic above it) — no matching ticker means it can't possibly be auto-enabled, since
-                // that toggle only exists on Compare tiles for watchlist tickers.
-                const matchingTicker = TICKERS.find(t => t.symbol === symbol);
-                const autoEnabled = matchingTicker ? autoTradeEnabledIds.has(matchingTicker.id) : false;
-                return { symbol, ...p, delta, autoEnabled };
+                return { id: t.id, symbol: t.symbol, held: true, delta, status, ...p };
             });
-            const totalDollar = rows.reduce((sum, r) => sum + r.dollar, 0);
-            const totalCostBasis = rows.reduce((sum, r) => sum + r.costBasis, 0);
+
+            const heldRows = rows.filter(r => r.held);
+            const totalDollar = heldRows.reduce((sum, r) => sum + r.dollar, 0);
+            const totalCostBasis = heldRows.reduce((sum, r) => sum + r.costBasis, 0);
             // Dollar-weighted, same formula combineAccountAndPositions() already uses for the
             // POSITIONS stat card — not a plain average of each row's own %, which would treat a small
             // position's swing as equally significant as a large one.
@@ -5024,8 +5421,8 @@
             // Sum of the individual deltas — mathematically the same as comparing current vs previous
             // total, as long as the same symbols were held both times. Rows with no prior data (brand
             // new positions) contribute 0 to this sum rather than making the whole total unavailable.
-            const anyDeltaAvailable = rows.some(r => r.delta !== null);
-            const totalDelta = anyDeltaAvailable ? rows.reduce((sum, r) => sum + (r.delta ?? 0), 0) : null;
+            const anyDeltaAvailable = heldRows.some(r => r.delta !== null);
+            const totalDelta = anyDeltaAvailable ? heldRows.reduce((sum, r) => sum + (r.delta ?? 0), 0) : null;
 
             // Background hue on the % Change cell specifically, per row and on TOTAL — more useful than
             // a single top banner, since it flags which individual positions are actually underwater,
@@ -5035,19 +5432,34 @@
             panel.innerHTML = `
       <div style="overflow-x:auto;">
       <table class="data-table positions-table" style="table-layout:fixed; width:100%;">
-        <thead><tr><th>Symbol</th><th>$ Change</th><th>% Change</th><th style="text-align:right;">$ Delta</th><th style="text-align:right;">Cost Basis</th><th style="text-align:center;">Sell</th></tr></thead>
+        <thead><tr><th>Symbol</th><th style="text-align:center;">Bot</th><th>$ Change</th><th>% Change</th><th style="text-align:right;">$ Delta</th><th style="text-align:right;">Cost Basis</th><th style="text-align:center;">Sell</th></tr></thead>
         <tbody>
-          ${rows.map(r => `
+          ${rows.map(r => {
+                const botCell = `<td id="posBotStatus-${r.id}" style="text-align:center; color:${r.status ? r.status.color : "#9FA8B5"}; font-weight:600; font-size:12px;">${r.status ? r.status.state : "—"}</td>`;
+                if (!r.held) {
+                    // Not currently held — position-specific columns collapse into one wide "–"
+                    // cell via colspan, rather than five separate, individually-empty cells.
+                    return `
             <tr>
-              <td>${r.autoEnabled ? `<i class="fa fa-bolt" style="color:#5C89B9; margin-right:5px;" title="Automated trading is enabled for ${r.symbol} — indicator only, toggle it from the Compare tile"></i>` : ""}${r.symbol}</td>
+              <td>${r.symbol}</td>
+              ${botCell}
+              <td colspan="5" style="text-align:center; color:var(--muted);">–</td>
+            </tr>`;
+                }
+                return `
+            <tr>
+              <td>${r.symbol}</td>
+              ${botCell}
               <td class="${signClass(r.dollar)}">${signPrefix(r.dollar)}${round2(r.dollar).toFixed(2)}</td>
               <td class="${signClass(r.pct)}" style="${r.pct < getEffectiveMaxLossPct() ? alertBg : ""}">${fmtPct(r.pct)}</td>
               <td class="${r.delta === null ? "dt-neutral" : signClass(r.delta)}" style="text-align:right;">${r.delta === null ? "—" : signPrefix(r.delta) + round2(r.delta).toFixed(2)}</td>
               <td style="text-align:right;">${fmtMoney(r.costBasis)}</td>
               <td style="text-align:center;"><button type="button" class="trade-btn trade-sell-btn" data-sell-symbol="${r.symbol}" title="Sell ${r.symbol} (full position)"><i class="fa fa-credit-card"></i></button></td>
-            </tr>`).join("")}
+            </tr>`;
+            }).join("")}
           <tr class="positions-total-row" style="font-weight:700;">
             <td>TOTAL</td>
+            <td></td>
             <td class="${signClass(totalDollar)}">${signPrefix(totalDollar)}${round2(totalDollar).toFixed(2)}</td>
             <td class="${signClass(totalPct)}" style="${totalPct < getEffectiveMaxLossPct() ? alertBg : ""}">${fmtPct(totalPct)}</td>
             <td class="${totalDelta === null ? "dt-neutral" : signClass(totalDelta)}" style="text-align:right;">${totalDelta === null ? "—" : signPrefix(totalDelta) + round2(totalDelta).toFixed(2)}</td>
@@ -5059,7 +5471,7 @@
       </div>`;
             wirePositionsSellButtons(panel);
             updateTradeButtonsDisabledState();
-            renderStatCards([]);
+            renderStatCards(buildBotSwitchStatusCards());
         }
 
         // Static, hand-picked sample data for iterating on this chart's look and feel (list item #3,
@@ -5279,13 +5691,18 @@
       </tr>`).join("");
 
             container.innerHTML = `
-      <p class="metric-sub" style="font-weight:700; color:var(--ink); margin:0 0 8px;">Journal</p>
+      <div style="display:flex; align-items:center; gap:8px; margin:0 0 8px;">
+        <p class="metric-sub" style="font-weight:700; color:var(--ink); margin:0;">Journal</p>
+        <span id="journalSyncIndicator" style="display:none; font-size:11px; color:#FBBF24; font-weight:600;" title="Last save hasn't synced to the server yet — save again once you have a connection">Not synced</span>
+      </div>
       <div class="journal-table-wrap">
         <table class="data-table journal-table" style="table-layout:fixed; width:100%;">
           <thead><tr><th style="width:90px;">Date</th><th>Note</th></tr></thead>
           <tbody>${todayRowHtml}${otherRowsHtml}</tbody>
         </table>
       </div>`;
+            updateJournalSyncIndicator(); // reflects the current in-memory status immediately — the
+            // element above is freshly created each render, always starting hidden until this runs
 
             document.getElementById("journalSaveBtn").addEventListener("click", () => {
                 const text = document.getElementById("journalTodayInput").value.trim();
@@ -5790,8 +6207,16 @@
             const nameEl = document.getElementById("newTickerName");
             const symbol = symEl.value.trim().toUpperCase();
             if (!symbol) return;
-            if (draftTickers.some(t => t.symbol === symbol)) { symEl.value = ""; return; }
-            draftTickers.push({ id: symbol, symbol, name: nameEl.value.trim() });
+            // Adding a symbol that already exists updates its name in place, rather than being silently
+            // ignored — same pattern ticker presets already use ("saving under an existing name updates
+            // that group"). Deliberately in-place, not delete-then-re-add: the entry's own position in
+            // the watchlist order is untouched, since draftTickers itself is never spliced at all here.
+            const existing = draftTickers.find(t => t.symbol === symbol);
+            if (existing) {
+                existing.name = nameEl.value.trim();
+            } else {
+                draftTickers.push({ id: symbol, symbol, name: nameEl.value.trim() });
+            }
             symEl.value = ""; nameEl.value = "";
             renderTickerManageList();
         });
@@ -5852,6 +6277,7 @@
         const autoTradeMaxGainCap = document.getElementById("autoTradeMaxGainCap");
         const autoTradeMaxLossCap = document.getElementById("autoTradeMaxLossCap");
         const autoTradeGainPausePct = document.getElementById("autoTradeGainPausePct");
+        const autoTradeGainPauseNegPct = document.getElementById("autoTradeGainPauseNegPct");
         const autoTradeEvalSecond = document.getElementById("autoTradeEvalSecond");
         const autoTradeTrailingPct = document.getElementById("autoTradeTrailingPct");
 
@@ -5885,6 +6311,7 @@
             // already relies on — correct behavior here, an empty field reads as "disabled" with no
             // special-casing needed.
             autoTradeGainPausePct.value = CONFIG.autoTrading.gainPausePct;
+            autoTradeGainPauseNegPct.value = CONFIG.autoTrading.gainPauseNegPct;
             // Populated fresh every time the dialog opens, same as every other field here — no live
             // update while it's open, matching how nothing else in this dialog refreshes mid-view either.
             const dayCapTitle = "A day cap was hit — no new buys until this resets automatically at the next trading day's 4am boundary. Selling and per-position max-loss are unaffected.";
@@ -6011,7 +6438,7 @@
             // (restoring a stale value from localStorage that never touched this dialog at all).
             const fieldsToValidate = [
                 autoTradeStartHmm, autoTradeEndHmm, autoTradeInvestDollars, autoTradeMaxLossPct,
-                autoTradeDeadbandPct, autoTradeDeadbandNegPct, autoTradeEvalSecond, autoTradeMaxGainCap, autoTradeMaxLossCap, autoTradeGainPausePct
+                autoTradeDeadbandPct, autoTradeDeadbandNegPct, autoTradeEvalSecond, autoTradeMaxGainCap, autoTradeMaxLossCap, autoTradeGainPausePct, autoTradeGainPauseNegPct
             ];
             for (const field of fieldsToValidate) {
                 if (!field.checkValidity()) {
@@ -6077,6 +6504,10 @@
             // saved, since clearing this field is itself the meaningful action: turning Gain Pause off.
             const parsedGainPausePct = parseFloat(autoTradeGainPausePct.value);
             CONFIG.autoTrading.gainPausePct = Number.isFinite(parsedGainPausePct) ? Math.max(0, parsedGainPausePct) : NaN;
+            // Real signed number, entered and used exactly as typed — no Math.max clamp toward zero,
+            // since this field is explicitly meant to accept a negative value directly.
+            const parsedGainPauseNegPct = parseFloat(autoTradeGainPauseNegPct.value);
+            CONFIG.autoTrading.gainPauseNegPct = Number.isFinite(parsedGainPauseNegPct) ? Math.min(0, parsedGainPauseNegPct) : NaN;
             const parsedEvalSecond = parseInt(autoTradeEvalSecond.value, 10);
             CONFIG.autoTrading.evalSecond = Number.isFinite(parsedEvalSecond) ? Math.min(59, Math.max(0, parsedEvalSecond)) : CONFIG.autoTrading.evalSecond;
             // Disabled field — deliberately not read from .value at all here. Stays NaN until the field
@@ -6306,7 +6737,11 @@
             // reset logic below — this fires purely off the real trading-day boundary being crossed
             // while the app is already open, tracked via lastViewForceSessionKey (initialized to the
             // CURRENT session at script-load, not null, so it never fires on a plain page load).
-            const currentViewForceSessionKey = getSessionWindow().sessionStart.getTime();
+            // Uses getReal4amBoundaryToday(), NOT getSessionWindow() — a real, confirmed bug found live:
+            // getSessionWindow() is selectedDate-aware, so simply picking a historical date changed what
+            // it returned, creating a false "session changed" mismatch and incorrectly re-forcing the
+            // view within a minute, even with no real trading-day boundary crossed at all.
+            const currentViewForceSessionKey = getReal4amBoundaryToday();
             if (lastViewForceSessionKey !== currentViewForceSessionKey) {
                 console.log("[4am reset] forcing Compare / Today / Last 6H for the new trading day");
                 lastViewForceSessionKey = currentViewForceSessionKey;
