@@ -1535,7 +1535,7 @@
                         ticker is running hot above its own trend or cooling off below it.
                     </p>
                     <p class="help-note">
-                        The four chips in the top-right are quick market context — ^IXIC (Nasdaq Composite),
+                        The four chips in the top-right are quick market context — QQQ (Nasdaq-100 ETF),
                         NQ=F (Nasdaq futures), CL=F (crude oil futures), and ^VIX — shown at a glance, same
                         as any watchlist ticker under the hood.
                     </p>
@@ -1807,11 +1807,15 @@
                     <p class="help-desc"><b>Positions table</b> lists every bolt-enabled symbol, not just currently-held
                         ones — a symbol waiting for its own confirming signal still shows a row, with its
                         position-specific columns collapsed to "–" until it's actually bought. The <b>Bot</b> column
-                        reflects what the automated evaluator most recently decided for that symbol: <b>WAIT</b> (armed
-                        but no signal yet), <b>HELD</b> (correctly holding), <b>CAP</b> (sold or blocked — day cap, max
-                        loss, or a state-based sell), <b>IDLE</b> (outside the configured buy window entirely). Only
-                        ever populated on whichever device is actually running the evaluator; the same status also
-                        appears as a small badge on each symbol's own Compare tile.</p>
+                        reflects what the automated evaluator most recently decided for that symbol: <b>WAIT - RED</b>
+                        (not yet armed — still waiting for its own confirming red bar, whether from Start HMM or Gain
+                        Pause), <b>WAIT - GREEN</b> (armed, correctly not buying because the current signal doesn't call
+                        for it), plain <b>WAIT</b> (a few other reasons buying is paused — "Buy today" off, insufficient
+                        buying power, or too early in the day to have enough bars yet), <b>HELD</b> (correctly holding),
+                        <b>CAP</b> (sold or blocked — day cap, max loss, or a state-based sell), <b>IDLE</b> (outside
+                        the configured buy window entirely). Only ever populated on whichever device is actually running
+                        the evaluator; the same status also appears as a small badge on each symbol's own Compare tile.
+                    </p>
                 </div>
                 <div class="help-section">
                     <p class="help-heading">Buy/Sell buttons</p>
@@ -2367,7 +2371,7 @@
                 <a href="#" id="resetSavedData"
                     style="color:var(--muted); text-decoration:underline; margin-left:6px;">Reset saved data</a>
             </p>
-            <p style="color:var(--muted); font-size:11px; margin-top:6px;">V102</p>
+            <p style="color:var(--muted); font-size:11px; margin-top:6px;">V104</p>
         </div>
     </div>
 
@@ -2657,7 +2661,7 @@
         // Fixed market-context chips (top right). Structurally identical to a watchlist ticker —
         // just always shown, never removed from Settings.
         const MACROS = [
-            { id: "IXIC", symbol: "^IXIC", label: "IXIC" },
+            { id: "QQQ", symbol: "QQQ", label: "QQQ" },
             { id: "NQF", symbol: "NQ=F", label: "NQ=F" },
             { id: "CLF", symbol: "CL=F", label: "CL=F" },
             { id: "VIX", symbol: "^VIX", label: "VIX" }
@@ -3528,10 +3532,10 @@
                         const dueToGainPause = CONFIG.autoTrading.lastGainPauseHmm !== null && effectiveArmHmm > CONFIG.autoTrading.startHmm;
                         if (dueToGainPause) {
                             console.log(`[AutoTrade] ${symbol}: %cwaiting for a red bar (Gain Pause)%c — no confirmed red bar since ${effectiveArmHmm} yet, not arming, no new buys`, AUTOTRADE_LOG_WHITE, "");
-                            recordBotStatus(symbol, "WAIT", "#5C89B9");
+                            recordBotStatus(symbol, "WAIT - RED", "#5C89B9");
                         } else {
                             console.log(`[AutoTrade] ${symbol}: %cbot is watching, waiting for a red bar%c — no confirmed red bar at/after Start HMM (${CONFIG.autoTrading.startHmm}) yet, not arming, no new buys`, AUTOTRADE_LOG_BLUE, "");
-                            recordBotStatus(symbol, "WAIT", "#5C89B9");
+                            recordBotStatus(symbol, "WAIT - RED", "#5C89B9");
                         }
                         continue;
                     }
@@ -3564,7 +3568,7 @@
                             }
                         } else {
                             console.log(`[AutoTrade] ${symbol}: %cno buy%c — correctly not owning`, AUTOTRADE_LOG_GREY, "");
-                            recordBotStatus(symbol, "WAIT", "#5C89B9");
+                            recordBotStatus(symbol, "WAIT - GREEN", "#5C89B9");
                         }
                     } catch (err) {
                         console.error(`[AutoTrade] ${symbol}: buy evaluation/execution failed — no action taken.`, err);
