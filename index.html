@@ -480,7 +480,12 @@
     border-radius:8px;
     padding:12px 14px 6px;
   }
-  .deadband-override-badge{
+  /* Renamed from .deadband-override-badge (2026-09-28) — now only used by Compare's
+     bot-status badge (compareBotStatusBadge-*), the deadband-override badge it used to also
+     style having been removed along with the rest of the deadband-based evaluator. A Research
+     variant of this class (.deadband-override-badge-research, bottom-left instead of
+     bottom-right) briefly existed for that same now-removed badge and was removed with it. */
+  .compare-corner-badge{
     position:absolute;
     bottom:6px;
     right:10px;
@@ -1123,7 +1128,7 @@
         <div class="help-section">
           <p class="help-heading">Research</p>
           <p class="help-desc">A one-off symbol lookup, separate from your watchlist — search any symbol, see its chart at any timeframe, without adding it or affecting your selected tickers. Purely for research: there's no path from here to your real watchlist. Ticker selection and symbol groups both grey out and have no effect while this view is active. Not saved between sessions — the searched symbol resets on reload.</p>
-          <p class="help-desc"><b>Dump to console</b> — logs this chart's exact current data (raw and %-normalized close/SMA, delta, a human-readable time label, and the deadband/SMA/buy-window settings in effect) as plain text, ready to copy and paste directly into a conversation. Fetches fresh at the moment it's clicked — nothing is stored between clicks, so timing the click is how a specific moment gets captured.</p>
+          <p class="help-desc"><b>Dump to console</b> — logs this chart's exact current data (raw and %-normalized close/SMA, delta, a human-readable time label, and the SMA/buy-window settings in effect) as plain text, ready to copy and paste directly into a conversation. Fetches fresh at the moment it's clicked — nothing is stored between clicks, so timing the click is how a specific moment gets captured.</p>
         </div>
         <div class="help-section">
           <p class="help-heading">Picking a past date</p>
@@ -1202,7 +1207,7 @@
           <p class="help-desc"><b>Today</b> comes from the account resource's <code>equity</code> and <code>last_equity</code> fields (today's change = equity − last_equity) — the account-level number, not derived from individual positions.</p>
           <p class="help-desc"><b>Positions</b> comes from the positions resource: an array, one entry per open position, each with <code>cost_basis</code> and <code>unrealized_pl</code> (numeric strings). Aggregated dollar-weighted across every returned position, not averaged per-position.</p>
           <p class="help-desc">Account equity and buying power also show as small blue text next to the clock, above the stat cards — reads "-" for either in Sample mode, since there's no real account behind it to report on.</p>
-          <p class="help-desc"><b>Positions table</b> lists every bolt-enabled symbol, not just currently-held ones — a symbol waiting for its own confirming signal still shows a row, with its position-specific columns collapsed to "–" until it's actually bought. The <b>Bot</b> column reflects what the automated evaluator most recently decided for that symbol: <b>WAIT - RED</b> (not yet armed — still waiting for its own confirming red bar, whether from Start HMM or Gain Pause), <b>WAIT - GREEN</b> (armed, correctly not buying because the current signal doesn't call for it), plain <b>WAIT</b> (a few other reasons buying is paused — "Buy today" off, insufficient buying power, or too early in the day to have enough bars yet), <b>HELD</b> (correctly holding), <b>CAP</b> (sold or blocked — day cap, max loss, or a state-based sell), <b>IDLE</b> (outside the configured buy window entirely). Only ever populated on whichever device is actually running the evaluator; the same status also appears as a small badge on each symbol's own Compare tile.</p>
+          <p class="help-desc"><b>Positions table</b> lists every bolt-enabled symbol UNION every currently-held position, whichever came first — a bolt-enabled symbol not currently held still shows a row (position-specific columns collapsed to "–" until it's actually bought), and a position you're holding for any reason, bot on or off, always shows a row too, even a symbol bought manually and not on the watchlist at all. The <b>Bot</b> column reflects what the automated evaluator most recently decided for that symbol — reads "—" for anything not currently bolt-enabled, whether or not you're holding it: <b>HELD</b> (holding, no automated buy trigger exists to act on — see Automated trading below), plain <b>WAIT</b> (not held; there's currently no automated buy trigger, so this is simply where every not-held bolt-enabled symbol sits), <b>CAP</b> (sold or blocked — day cap or max loss). Only ever populated on whichever device is actually running the evaluator; the same status also appears as a small badge on each symbol's own Compare tile.</p>
         </div>
         <div class="help-section">
           <p class="help-heading">Buy/Sell buttons</p>
@@ -1235,25 +1240,18 @@
           <p class="help-desc"><b>The bolt icon on each Compare tile</b> opts that symbol in or out.</p>
           <ul class="help-desc">
             <li><b>Grey</b> — off</li>
-            <li><b>Dim blue</b> — armed: enabled, but outside your buy window right now</li>
-            <li><b>Full blue</b> — active: enabled and within the window</li>
+            <li><b>Dim blue</b> — enabled, but outside the configured buy window right now</li>
+            <li><b>Full blue</b> — enabled and within the window</li>
             <li>Always clickable, even on a historical date — turning a symbol off is never blocked</li>
-            <li>Enabling it on a symbol that's already moving is picked up on the very next check, not just a fresh move from that point forward</li>
           </ul>
-          <p class="help-desc"><b>Buying and selling both work the same way: state-based, not a one-time trigger.</b> Every minute, each enabled symbol is asked one question — does its current delta bar say it should be owned right now?</p>
+          <p class="help-desc"><b>No automated buy trigger is currently implemented</b> (removed 2026-09-28 — the previous approach, a deadband-based check of whether the current bar's close sat far enough above or below its own SMA, "did work somewhat but not very well" per real trading days spent comparing it against manual entries; a replacement is still being designed). Enabling a symbol's bolt right now does not buy it — entry is a manual decision (the Buy/Sell buttons on Research or Compare), not something this evaluator does on its own.</p>
+          <p class="help-desc">What a bolt-enabled symbol's automation still does, in full, whether the position was bought manually or (once a new trigger exists) by the bot:</p>
           <ul class="help-desc">
-            <li>Should be owned, not already held, buy window open, "Buy today" on, at least one confirmed red bar since Start HMM (see below), enough buying power → buys</li>
-            <li>Held, but the bar says it shouldn't be → sells (buy window doesn't apply to selling — a held position needs an exit any time the market's open)</li>
-          </ul>
-          <p class="help-desc">This replaced an earlier design that only acted on a fresh change in direction — that rule could miss a real move entirely if no clean flip existed at the exact moment it happened to check.</p>
-          <p class="help-desc"><b>Start HMM requires a confirmed red bar first, not just the clock.</b> Reaching Start HMM alone doesn't arm a symbol to buy — the bot also waits for at least one genuine, fully closed red bar at or after that time before trusting the next green signal enough to act on it. Without this, a symbol could buy right into the tail end of a move that was already well underway before the bot started watching, rather than a fresh one. Re-evaluated fresh every single cycle, with no memory of past checks — so adjusting Start HMM later in the day (say, after a cap trips and gets cleared) applies the same rule to the new time automatically, with nothing extra to set. Applies to buying only; never affects selling a held position. The console shows a distinct blue message for a symbol still waiting on its own confirming red bar.</p>
-          <p class="help-desc">A held position also sells on either of two independent triggers, regardless of what the delta bar says:</p>
-          <ul class="help-desc">
-            <li>Its own loss crossing your configured Max Loss threshold (can differ before/after 11:30 AM — see below)</li>
-            <li>A day cap being hit (see below)</li>
+            <li>Sells if its own loss crosses your configured Max Loss threshold (can differ before/after 11:30 AM — see below)</li>
+            <li>Sells if a day cap is hit (see below)</li>
+            <li>Sells on Gain Pause or Day-Trail, if configured (see their own entries below)</li>
           </ul>
           <p class="help-desc"><b>Turning a symbol's bolt off also stops watching any position you're holding in it</b> — not just new buying. You'll get a one-time notice when this applies to something you currently hold; the toggle itself always succeeds regardless.</p>
-          <p class="help-desc"><b>Deadband</b> — how far price has to move from its own trend line before it counts as a real signal rather than noise; anything inside it reads neutral. Morning/default and gain/loss can each use different values — leave the second field of either pair empty to use the same value throughout.</p>
           <p class="help-desc"><b>Position max loss (%)</b> can differ before 11:30 AM versus the rest of the day — a fixed cutoff. A position held across that boundary starts using the other threshold the moment the clock crosses it, regardless of when it was opened.</p>
           <p class="help-desc"><b>Invest $ is capped at $5,000</b> during this testing phase — hardcoded, not something a larger Settings number can override. A buy is also skipped, silently and safely, if buying power doesn't actually cover the configured amount.</p>
           <p class="help-desc"><b>Max gain cap ($)</b> — account-level, not per-symbol. Once today's total gain reaches this, sells every bolt-enabled held position and locks out new buying for the rest of the trading day.</p>
@@ -1449,25 +1447,6 @@
           </td>
         </tr>
         <tr>
-          <td>Deadband — neg / pos (± % counts as neutral)</td>
-          <td style="text-align:right;">
-            <div style="display:flex; gap:6px; justify-content:flex-end;">
-              <input type="number" id="autoTradeDeadbandNegPct" class="edit-input" min="0" max="10" step="0.05" style="width:70px;" placeholder="same" title="Negative side — leave empty to use the same value as the positive side">
-              <input type="number" id="autoTradeDeadbandPct" class="edit-input" min="0" max="10" step="0.05" style="width:70px;" title="Positive side">
-            </div>
-          </td>
-        </tr>
-        <tr>
-          <td>Deadband override<br><span style="color:var(--muted); font-size:11px;">these symbols' own thresholds — wins over the global deadband above whenever the symbol is also Auto-Trade enabled</span></td>
-          <td style="text-align:right;">
-            <div style="display:flex; gap:6px; justify-content:flex-end;">
-              <input type="text" id="autoTradeDeadbandOverrideSymbols" class="edit-input" placeholder="QQQ, DIA" title="Comma-separated symbols — always shown on the chart with these thresholds; if also Auto-Trade enabled, real buy/sell/arming uses these thresholds too, not the global deadband" style="width:110px;">
-              <input type="number" id="autoTradeDeadbandOverrideNegPct" class="edit-input" max="0" step="0.05" style="width:70px;" placeholder="same" title="Negative side — entered as a real signed number (e.g. -0.30), used exactly as typed. Leave empty to use the positive-side value symmetrically, same as today">
-              <input type="number" id="autoTradeDeadbandOverridePct" class="edit-input" min="0" max="10" step="0.05" style="width:70px;" title="Positive side">
-            </div>
-          </td>
-        </tr>
-        <tr>
           <td id="autoTradeMaxGainCapLabel">Max gain cap ($) — sells everything, stops buying for the day</td>
           <td style="text-align:right;"><input type="number" id="autoTradeMaxGainCap" class="edit-input" min="0" max="10000" step="5"></td>
         </tr>
@@ -1631,7 +1610,7 @@
         <a href="#" id="importSettings" style="color:var(--muted); text-decoration:underline; margin-left:6px;">Import settings</a>
         <a href="#" id="resetSavedData" style="color:var(--muted); text-decoration:underline; margin-left:6px;">Reset saved data</a>
       </p>
-      <p style="color:var(--muted); font-size:11px; margin-top:6px;">V200</p>
+      <p style="color:var(--muted); font-size:11px; margin-top:6px;">V201</p>
     </div>
   </div>
 
@@ -1697,12 +1676,11 @@
       endHmm: 1559, // regular session upper bound, matching the same 930-1559 boundary from the user's own reference app — can't automate outside actual trading hours anyway
       investDollars: 100,
       maxLossPct: -1, // the afternoon/default threshold now that morning can differ — used whenever hmm >= AUTO_TRADE_MORNING_CUTOFF_HMM, or whenever the morning override below isn't set
-      maxLossPctMorning: NaN, // NaN means "not set, use maxLossPct in the morning too" — same symmetric default every prior session was validated against, same pattern as deadbandNegPct. Applies whenever hmm < AUTO_TRADE_MORNING_CUTOFF_HMM.
-      deadbandPct: 0.25, // percentage points either side of zero that count as "neutral" delta — neither green nor red — for crossover detection. Also the positive-side boundary now that pos/neg can differ.
-      deadbandNegPct: NaN, // NaN means "not set, use deadbandPct on the negative side too" — same symmetric default every prior session was validated against. A real number here is an intentional, separate negative-side threshold.
-      deadbandOverrideSymbols: "", // raw typed string, comma-separated (e.g. "QQQ, DIA") — parsed on demand via getDeadbandOverrideSymbols(), not pre-split here. Always drives chart display/coloring for these symbols; if a listed symbol is ALSO in autoTradeEnabledIds, evaluateAutomatedTrading() uses these thresholds (deadbandOverridePct/deadbandOverrideNegPct) instead of the global deadbandPct/deadbandNegPct for that symbol's real buy/sell/arming decisions — the two lists are otherwise fully independent
-      deadbandOverridePct: 0.25, // the override value applied to symbols in the list above — positive-side boundary
-      deadbandOverrideNegPct: NaN, // negative-side override boundary — entered as a real SIGNED number directly (e.g. -0.30), used exactly as typed, same convention as gainPauseNegPct/dayTrailDollars (NOT the magnitude+fallback convention deadbandNegPct uses). NaN means "not set" — falls back to applying deadbandOverridePct symmetrically on the negative side too, same as today's behavior.
+      maxLossPctMorning: NaN, // NaN means "not set, use maxLossPct in the morning too" — same symmetric default every prior session was validated against. Applies whenever hmm < AUTO_TRADE_MORNING_CUTOFF_HMM.
+      // deadbandPct/deadbandNegPct/deadbandOverride{Symbols,Pct,NegPct} removed 2026-09-28 —
+      // see evaluateAutomatedTrading()'s own comment for the full story. Per the user, after a
+      // real day comparing this crossover approach against manual trading: "that approach did
+      // work somewhat but not very well. the rules we have will change."
       evalSecond: 59, // which second (0-59) within the blue five-minute cue's already-fixed active minute to evaluate at — not a setting for the cue itself, which stays tied to the chart's own bar windows
       maxGainCapDollars: 100, // account-level, dollars, ceiling 10000 (Max Loss cap stays at 1000 — deliberately not raised alongside Gain) — once today's gain reaches this, sell every bolt-enabled held position and lock out new buying for the rest of the trading day
       maxLossCapDollars: -100, // direct threshold, not a magnitude — todayPL <= this value locks
@@ -2145,6 +2123,15 @@
   let compareCharts = {};
   let compareChartsBars = {};
   let researchSymbol = null; // applied symbol, session-only — never persisted, resets on reload
+  // Bumped at the start of every renderResearch() call (including the early-return). Live data
+  // fetches can take long enough for a second render to start before the first one's await
+  // resolves (the 15s auto-refresh tick nulls Research's view-signature cache and re-fires
+  // render() even mid-fetch) — without this guard, an old in-flight call can resolve after a
+  // newer one and overwrite the title/panel with its now-stale symbol's data, or a fetch that
+  // was in flight when the symbol got cleared can land after the "Enter a symbol" placeholder
+  // is already showing and silently repaint a chart over it. Only the most recent call is ever
+  // allowed to touch the DOM; every earlier one bails out as soon as it notices it's stale.
+  let researchRenderSeq = 0;
   let researchChart = null;
   let researchChartBars = null;
   let compareWatchlistSignature = null; // tracks the full TICKERS list — tiles are built once per watchlist, not once per selection
@@ -2314,16 +2301,10 @@
       // Number.isFinite() correctly falls back to NaN (not 0, not the default) whenever the
       // saved value wasn't a real number, preserving "use the default all day" through a reload.
       CONFIG.autoTrading.maxLossPctMorning = Number.isFinite(at.maxLossPctMorning) ? Math.min(0, at.maxLossPctMorning) : NaN;
-      if (Number.isFinite(at.deadbandPct)) CONFIG.autoTrading.deadbandPct = Math.min(10, Math.max(0, at.deadbandPct));
-      // Same NaN round-trip handling as trailingPct below — JSON.stringify(NaN) becomes null,
-      // so Number.isFinite() correctly falls back to NaN (not 0, not the default) whenever the
-      // saved value wasn't a real number, preserving "use the positive side" through a reload.
-      CONFIG.autoTrading.deadbandNegPct = Number.isFinite(at.deadbandNegPct) ? Math.min(10, Math.max(0, at.deadbandNegPct)) : NaN;
-      if (typeof at.deadbandOverrideSymbols === "string") CONFIG.autoTrading.deadbandOverrideSymbols = at.deadbandOverrideSymbols;
-      if (Number.isFinite(at.deadbandOverridePct)) CONFIG.autoTrading.deadbandOverridePct = Math.min(10, Math.max(0, at.deadbandOverridePct));
-      // Signed convention (like gainPauseNegPct/dayTrailDollars) — Math.min(0, ...) clamps to
-      // non-positive, doesn't touch magnitude. NaN round-trip preserved same as above.
-      CONFIG.autoTrading.deadbandOverrideNegPct = Number.isFinite(at.deadbandOverrideNegPct) ? Math.min(0, at.deadbandOverrideNegPct) : NaN;
+      // deadbandPct/deadbandNegPct/deadbandOverride* load handling removed 2026-09-28 along
+      // with the fields themselves — see CONFIG.autoTrading's own comment. A settings blob
+      // saved before this change may still carry these keys; they're simply ignored now, same
+      // as any other now-unrecognized field.
       if (Number.isFinite(at.evalSecond)) CONFIG.autoTrading.evalSecond = at.evalSecond;
       if (Number.isFinite(at.maxGainCapDollars)) CONFIG.autoTrading.maxGainCapDollars = Math.min(10000, Math.max(0, at.maxGainCapDollars));
       if (Number.isFinite(at.maxLossCapDollars)) CONFIG.autoTrading.maxLossCapDollars = Math.min(1000, Math.max(-1000, at.maxLossCapDollars));
@@ -2501,115 +2482,28 @@
   // normalized against the session's starting price) — verified numerically to match building
   // the full normalized series before this was written, just derived directly here instead of
   // constructing and discarding most of it.
+  // No longer called anywhere as of 2026-09-28 — its one call site was the deadband-based
+  // state check inside evaluateAutomatedTrading(), removed per the user (see that function's
+  // own comment). Left in place, not deleted, in case a future trigger design wants the same
+  // delta series.
   function computePctDeltaSeries(close, smaVals) {
     const base = close[0];
     return close.map((c, i) => ((c - smaVals[i]) / base) * 100);
   }
 
-  // Logic-based Start HMM — automates a manual habit: wait for a genuine, closed red bar at or
-  // after Start HMM before trusting a green signal enough to buy. Prevents buying into the tail
-  // end of a move that was already underway before the bot started watching, and separately
-  // prevents entering mid-run if Start HMM is set later in the day (verified against real data:
-  // a hypothetical 11:00 entry with no gate bought right into an already-aging run and took a
-  // confirmed loss on the very next bar; the same setup with this gate applied waited for a
-  // fresh red-then-green sequence and turned into a gain instead).
-  // Deliberately stateless — no memory of past evaluations at all. Every call re-scans the
-  // symbol's own series fresh, from whatever Start HMM currently says, forward to now. This is
-  // what makes adjusting Start HMM mid-day (e.g. after a max-gain cap trips and caps get raised
-  // to keep trading later in the day) work correctly for free — the very next cycle re-scans
-  // from the new value, no special-case "did Start HMM just change" detection needed anywhere.
-  // Same red-bar threshold the caller already resolved for its own sell decision (the caller's
-  // effectiveNegDeadband — global deadbandNegPct, or the override's negative value for a symbol
-  // in the override list), passed in rather than read internally, so arming and trading always
-  // agree on the same threshold for a given symbol. Same "-1 is the still-forming current bar,
-  // never trustworthy" convention already used everywhere else in this evaluator — only bars up
-  // to (not including) the last one are considered "closed."
-  function isSymbolArmedForBuy(times, deltaPct, startHmm, negDeadband) {
-    const n = deltaPct.length - 1; // excludes the still-forming last bar
-    for (let i = 0; i < n; i++) {
-      const hmm = getHMM(new Date(times[i]));
-      if (hmm >= startHmm && deltaPct[i] < -negDeadband) {
-        return true; // found a genuine, closed red bar at or after Start HMM
-      }
-    }
-    return false;
-  }
+  // Removed 2026-09-28, as part of retiring the deadband-based auto-trading evaluator (see
+  // evaluateAutomatedTrading()'s own comment for the full story): isSymbolArmedForBuy() (the
+  // Start-HMM/Gain-Pause "must see a fresh confirmed red bar before arming" gate),
+  // computeTheoreticalGainPct() + its reduce_safe() helper (an already-dead, deadband-colored
+  // buy-on-green/sell-on-red windowed gain calc, unused since the Potential badge switched to
+  // computeGainSince10amPct() below on 2026-09-26), and classifyDelta() (a deadband-based
+  // green/red/neutral classifier that, it turns out, was ALSO already dead — the delta bars
+  // under every chart have colored by plain sign (>=0 green/red) since some point before this
+  // session, not by this function; confirmed via grep, no call sites existed). None of these
+  // had any consumer left outside the deadband mechanism itself.
 
-  // Sum an array, 0 for empty — matches the same default the user's own function relies on
-  // (Array.prototype.reduce with no initial value throws on an empty array otherwise).
-  function reduce_safe(array, default_value = 0) {
-    if (array.length === 0) {
-      return default_value;
-    } else {
-      return array.reduce((p, c) => p + c);
-    }
-  }
-
-  // User-authored — traced and verified against several test cases (an index-0 window-open
-  // edge case, a window still open at the filtered series' end, and the user's own hand-worked
-  // reference example) before being wired in here. Two real bugs found and fixed in that
-  // process: (1) `!start` alone is true for both null AND 0, so a window opening at the very
-  // first filtered bar was silently mishandled — fixed with a real `inWindow` boolean instead
-  // of relying on `start` itself being truthy; (2) a window still open when the filtered
-  // series ends was being silently dropped rather than closed out at the last bar — fixed to
-  // match the aligned premise that the chart visually shows that move regardless of whether a
-  // red bar ever appears to formally end it.
-  // Deliberately filtered to regular trading hours (9:30 AM–3:55 PM) — the user's own choice,
-  // to cut pre/after-hours noise out of the analysis. `close` here is the same %-from-
-  // session-start series already driving the chart's own white line — each window's gain is a
-  // plain subtraction of that line's own value at end vs. start, not a raw-price return.
-  // No longer called anywhere as of 2026-09-26 — Research/Compare's "Potential" badge switched
-  // to the simpler computeGainSince10amPct() below (10:00 AM -> end-of-chart endpoint delta,
-  // capped at 4:00 PM) per user request. Left in place, not deleted, in case the
-  // buy-on-green/sell-on-red windowed
-  // read is wanted again later (e.g. as a second badge, or restored if the new one doesn't work
-  // out) — wasn't asked to remove it, just to change what the badge shows.
-  function computeTheoreticalGainPct(times, close, deltaPct, deadbandPct, negDeadbandPct) {
-    const GREY = 'grey';
-    const GREEN = 'green';
-    const RED = 'red';
-    const series = times.map((v, i) => {
-      return {
-        hmm: getHMM(new Date(v)),
-        t: v,
-        diff: deltaPct[i],
-        close: close[i],
-        color: null,
-      };
-    });
-    const filtered = series.filter((v) => v.hmm >= 930 && v.hmm <= 1555);
-    filtered.forEach((v) => {
-      v.color = GREY;
-      if (v.diff >= deadbandPct) {
-        v.color = GREEN;
-      } else if (v.diff <= -(negDeadbandPct)) {
-        v.color = RED;
-      }
-    });
-
-    const windows = [];
-    let start = null;
-    let inWindow = false;
-    filtered.forEach((v, i) => {
-      if (!inWindow && v.color === GREEN) {
-        start = i;
-        inWindow = true;
-      } else if (inWindow && v.color === RED) {
-        windows.push({ s: filtered[start].hmm, e: v.hmm, i: start, i2: i, g: v.close - filtered[start].close });
-        start = null;
-        inWindow = false;
-      }
-    });
-    if (inWindow && start !== null && filtered.length) {
-      const lastBar = filtered[filtered.length - 1];
-      windows.push({ s: filtered[start].hmm, e: lastBar.hmm, i: start, i2: filtered.length - 1, g: lastBar.close - filtered[start].close, stillOpen: true });
-    }
-
-    return reduce_safe(windows.map((v) => v.g));
-  }
-
-  // Simple endpoint delta, not the buy-on-green/sell-on-red windowed logic
-  // computeTheoreticalGainPct() uses. Start = the "calculated start" — the same crossover point
+  // Simple endpoint delta, not the buy-on-green/sell-on-red windowed logic the now-removed
+  // computeTheoreticalGainPct() used. Start = the "calculated start" — the same crossover point
   // the chart's own green y-axis reference line marks (see buildSplitChartOptions'
   // potentialCrossY): the first bar, on the MOST RECENT trading day present in `times`, at/after
   // startHmm (HMM format, default CONFIG.potentialStartHmm) where Close >= SMA, NOT just the
@@ -2650,66 +2544,17 @@
     return pctSeries[endIdx] - pctSeries[startIdx];
   }
 
-  // green/red/neutral with the deadband applied — the general-purpose version of the UI's own
-  // `>= 0` color check, extended with a neutral zone that check has no concept of at all.
-  function classifyDelta(deltaPct) {
-    const n = CONFIG.autoTrading.deadbandPct;
-    if (deltaPct > n) return "green";
-    if (deltaPct < -n) return "red";
-    return "neutral";
-  }
-
-  // Parses the raw, comma-separated override string on demand — never pre-split or cached,
-  // so it always reflects whatever's currently saved. Forgiving of formatting: trims whitespace
-  // and uppercases each symbol, so "qqq, dia" behaves the same as "QQQ,DIA". Always drives chart
-  // display/coloring for these symbols; evaluateAutomatedTrading() also checks this list per
-  // symbol and, for a symbol that's both here AND in autoTradeEnabledIds, uses deadbandOverridePct/
-  // deadbandOverrideNegPct instead of the global deadbandPct/deadbandNegPct for real trading.
-  function getDeadbandOverrideSymbols() {
-    return (CONFIG.autoTrading.deadbandOverrideSymbols || "")
-      .split(",")
-      .map(s => s.trim().toUpperCase())
-      .filter(s => s.length > 0);
-  }
-
-  // Resolves the negative-side deadband — deadbandNegPct if it's been explicitly set (a real
-  // number), otherwise falls back to the same deadbandPct used on the positive side. This is
-  // the ONLY place that fallback logic lives, so both the decision logic and the chart's own
-  // bar coloring stay in sync by construction rather than needing to duplicate the same
-  // Number.isFinite check in two places.
-  function getEffectiveNegDeadband() {
-    return Number.isFinite(CONFIG.autoTrading.deadbandNegPct)
-      ? CONFIG.autoTrading.deadbandNegPct
-      : CONFIG.autoTrading.deadbandPct;
-  }
-
-  // Resolves the negative-side deadband MAGNITUDE for OVERRIDE (watch-only) symbols, in the same
-  // "magnitude to be negated by the caller" convention every deadband call site already uses
-  // (see getEffectiveNegDeadband() above and every `-effectiveNegDeadband` site below).
-  // deadbandOverrideNegPct itself is stored as a real SIGNED number typed directly (e.g. -0.30) —
-  // same convention as gainPauseNegPct/dayTrailDollars, deliberately different from
-  // deadbandNegPct's magnitude convention — so it's negated back into a magnitude once, here,
-  // rather than at every call site. NaN (not set) falls back to deadbandOverridePct applied
-  // symmetrically, same as today's behavior before this field existed.
-  function getEffectiveOverrideNegDeadbandMagnitude() {
-    return Number.isFinite(CONFIG.autoTrading.deadbandOverrideNegPct)
-      ? -CONFIG.autoTrading.deadbandOverrideNegPct
-      : CONFIG.autoTrading.deadbandOverridePct;
-  }
-
-  // Badge text for the override deadband — shows just the one value when the negative side isn't
-  // set (today's symmetric behavior, unchanged look), or "neg / pos" once it is, same ordering
-  // convention as the Settings label above it ("Deadband — neg / pos").
-  function formatDeadbandOverrideBadgeText() {
-    return Number.isFinite(CONFIG.autoTrading.deadbandOverrideNegPct)
-      ? `Override Enabled: ${CONFIG.autoTrading.deadbandOverrideNegPct}% / ${CONFIG.autoTrading.deadbandOverridePct}%`
-      : `Override Enabled: ${CONFIG.autoTrading.deadbandOverridePct}%`;
-  }
+  // Removed 2026-09-28, alongside the rest of the deadband-based evaluator (see
+  // evaluateAutomatedTrading()'s own comment): classifyDelta() (dead — nothing called it; the
+  // delta bars color by plain sign, not this), getDeadbandOverrideSymbols(),
+  // getEffectiveNegDeadband(), getEffectiveOverrideNegDeadbandMagnitude(), and
+  // formatDeadbandOverrideBadgeText() — the override-symbols parsing, the pos/neg threshold
+  // resolution, and the chart badge text, none of which have a purpose left once the deadband
+  // settings and the badge itself are gone.
 
   // Resolves the effective per-position max-loss threshold for right now — maxLossPctMorning
   // if the current time is before the (fixed, non-adjustable) 11:30 cutoff AND it's been
-  // explicitly set, otherwise the same maxLossPct used the rest of the day. Same pattern as
-  // getEffectiveNegDeadband() above: one place the fallback logic lives, checked fresh against
+  // explicitly set, otherwise the same maxLossPct used the rest of the day. Checked fresh against
   // the current clock every time this is called — no tracking of when a position was opened,
   // so a position held across the boundary just starts using the other threshold the moment
   // the clock crosses it.
@@ -2924,138 +2769,25 @@
           }
         }
 
-        // --- State-based decision, replacing transition-only crossover detection. Reads current
-        // state only ("does this bar say I should own it, right now") rather than requiring a
-        // fresh transition — confirmed necessary after real, repeated misses: a bar settling to
-        // its true value after already shifting from "current" to "previous" meant a genuine
-        // crossover could permanently go unevaluated under the old rule. prev is fetched and
-        // logged for diagnostic context only — it plays no part in this decision anymore. Same
-        // -2/-3 index protection as before: index -1 is always the still-forming current bar,
-        // never trustworthy regardless of timing. Fetched once per symbol here, used by both
-        // the held and not-held branches below, since this state-based check needs the same reading
-        // either way. ---
-        let last, prev, seriesTimes, deltaPctSeries;
-        try {
-          const series = await loadFreshTodaySeriesForAutoTrade(symbol);
-          if (series.close.length < 3) {
-            console.log(`[AutoTrade] ${symbol}: not enough bars yet to evaluate`);
-            recordBotStatus(symbol, "WAIT", "#5C89B9");
-            continue;
-          }
-          const deltaPct = computePctDeltaSeries(series.close, series.sma);
-          last = deltaPct[deltaPct.length - 2];
-          prev = deltaPct[deltaPct.length - 3];
-          seriesTimes = series.times; // hoisted to outer scope, same pattern as last/prev —
-          deltaPctSeries = deltaPct;  // needed below for isSymbolArmedForBuy(), outside this try block
-          console.log(`[AutoTrade] ${symbol}: last closed bar=${last.toFixed(3)}%, prev bar=${prev.toFixed(3)}% (held=${isHeld})`);
-        } catch (err) {
-          console.error(`[AutoTrade] ${symbol}: series fetch/evaluation failed — no action taken.`, err);
-          continue;
-        }
-
-        // Override wins for this symbol, full stop — both the buy/sell threshold below and the
-        // Start HMM arming gate (isSymbolArmedForBuy() call further down) read these same two
-        // values, so a symbol never arms on one set of thresholds and trades on another. This is
-        // the ONE place deadbandOverrideSymbols stops being purely cosmetic: a symbol in that
-        // list AND in autoTradeEnabledIds now really trades on its own thresholds, not the
-        // account-wide ones. A symbol in the override list but not auto-trade-enabled is
-        // unaffected — this loop only ever runs for autoTradeEnabledIds members to begin with.
-        const isOverridden = getDeadbandOverrideSymbols().includes(symbol.toUpperCase());
-        const effectivePosDeadband = isOverridden ? CONFIG.autoTrading.deadbandOverridePct : CONFIG.autoTrading.deadbandPct;
-        const effectiveNegDeadband = isOverridden ? getEffectiveOverrideNegDeadbandMagnitude() : getEffectiveNegDeadband();
-
-        const shouldOwn = last > effectivePosDeadband;
-        const shouldNotOwn = last < -effectiveNegDeadband;
-
+        // --- No automated buy/sell trigger is currently implemented. Removed 2026-09-28: the
+        // deadband-based state check (does the current bar's close-vs-SMA delta, outside a
+        // configurable "deadband" neutral zone, say this symbol should be owned right now?) and
+        // its Start-HMM/Gain-Pause "must see a fresh confirmed red bar before arming"
+        // requirement (isSymbolArmedForBuy). Per the user, after a real day of comparing it
+        // against manual trading: "that approach did work somewhat but not very well. the rules
+        // we have will change." No replacement trigger exists yet — entry is, for now, an
+        // explicit manual decision (Research view's Buy/Sell buttons), not something this
+        // evaluator does on its own. What's UNCHANGED and still fully active: day-cap lockout,
+        // per-position max loss, Gain Pause, and Day-Trail — all checked above this point,
+        // independent of any crossover/deadband concept, and they still protect a position
+        // regardless of whether it was bought manually or (once a new trigger exists) by the
+        // bot. Until that trigger is designed, a bolt-enabled symbol simply holds if held, or
+        // waits if not — no bar-series fetch needed for either, since nothing here consumes it
+        // anymore. ---
         if (isHeld) {
-          // --- State-based sell only — max-loss for this symbol already checked and cleared
-          // above, before the series fetch even ran. ---
-          try {
-            let shouldSell = false;
-            if (shouldNotOwn) {
-              shouldSell = true;
-            }
-            if (shouldSell) {
-              await TradingAPI.sell(symbol);
-              tradedThisCycle = true;
-              console.log(`[AutoTrade] ${symbol}: %cSOLD%c (state-based)`, AUTOTRADE_LOG_RED, "");
-              recordBotStatus(symbol, "CAP", "#C96A6A");
-            } else {
-              console.log(`[AutoTrade] ${symbol}: %cno sell%c — correctly holding`, AUTOTRADE_LOG_GREY, "");
-              recordBotStatus(symbol, "HELD", "#F5F3EF");
-            }
-          } catch (err) {
-            console.error(`[AutoTrade] ${symbol}: sell evaluation/execution failed — no action taken.`, err);
-          }
-          continue; // a held position is never also evaluated for buying
-        }
-
-        // --- Not held: state-based buy, still gated by the buy window — that part is
-        // unchanged, this check doesn't touch when buying is allowed, only whether it
-        // happens once it is. The "Buy today" manual override is checked here too, alongside
-        // the window — both are simply reasons to skip buying specifically, never reasons to
-        // touch a held position, which is why neither one lives in the day-cap block above
-        // (that one does affect selling; these two deliberately never do). ---
-        if (CONFIG.autoTrading.manualNoBuyToday) {
-          console.log(`[AutoTrade] ${symbol}: not held, but "Buy today" is off — no new buys`);
+          recordBotStatus(symbol, "HELD", "#F5F3EF");
+        } else {
           recordBotStatus(symbol, "WAIT", "#5C89B9");
-          continue;
-        }
-        if (nowHmm < CONFIG.autoTrading.startHmm || nowHmm > CONFIG.autoTrading.endHmm) {
-          console.log(`[AutoTrade] ${symbol}: not held, but outside buy window (now=${nowHmm}, window=${CONFIG.autoTrading.startHmm}-${CONFIG.autoTrading.endHmm})`);
-          recordBotStatus(symbol, "IDLE", "#9FA8B5");
-          continue;
-        }
-        // Gain Pause raises the effective re-arm floor beyond Start HMM alone, whenever it's
-        // fired later in the day than Start HMM itself — same isSymbolArmedForBuy() gate #6
-        // already built, just given a fresh reference point. If Gain Pause hasn't fired today
-        // (lastGainPauseHmm is null) or fired earlier than Start HMM, this is simply Start HMM,
-        // unchanged from before Gain Pause existed.
-        const effectiveArmHmm = Math.max(CONFIG.autoTrading.startHmm, CONFIG.autoTrading.lastGainPauseHmm || 0);
-        if (!isSymbolArmedForBuy(seriesTimes, deltaPctSeries, effectiveArmHmm, effectiveNegDeadband)) {
-          const dueToGainPause = CONFIG.autoTrading.lastGainPauseHmm !== null && effectiveArmHmm > CONFIG.autoTrading.startHmm;
-          if (dueToGainPause) {
-            console.log(`[AutoTrade] ${symbol}: %cwaiting for a red bar (Gain Pause)%c — no confirmed red bar since ${effectiveArmHmm} yet, not arming, no new buys`, AUTOTRADE_LOG_WHITE, "");
-            recordBotStatus(symbol, "WAIT - RED", "#5C89B9");
-          } else {
-            console.log(`[AutoTrade] ${symbol}: %cbot is watching, waiting for a red bar%c — no confirmed red bar at/after Start HMM (${CONFIG.autoTrading.startHmm}) yet, not arming, no new buys`, AUTOTRADE_LOG_BLUE, "");
-            recordBotStatus(symbol, "WAIT - RED", "#5C89B9");
-          }
-          continue;
-        }
-        try {
-          if (shouldOwn) {
-            // Independent second enforcement layer for the $100 cap — even a stale config
-            // value that somehow bypassed the Settings-side clamp can't slip through here.
-            const investAmount = Math.min(AUTO_TRADE_MAX_INVEST_DOLLARS, CONFIG.autoTrading.investDollars);
-            // Checked against the same accountInfo already fetched this cycle — no extra
-            // network call. Console-only, matching every other decision this evaluator makes
-            // (day-cap, max-loss, buy-today) — none of those use a toast/popup either, and an
-            // underfunded buy isn't more noteworthy than a day-cap liquidation. In practice a
-            // secondary safety net given the configured invest ceiling ($5000) times the number
-            // of enabled symbols already bounds total exposure well below most real balances —
-            // but real regardless, and cheap to check since the data's already in hand.
-            // Fail-closed here too, consistent with every other gate in this function: if
-            // buying_power somehow isn't a valid number (a malformed response that still
-            // technically succeeded, rather than the fetch itself failing, which already aborts
-            // the whole cycle earlier), that's treated the same as "not enough" — no buy, not a
-            // default-to-proceed.
-            if (!Number.isFinite(accountInfo.buyingPower) || accountInfo.buyingPower < investAmount) {
-              const bpDisplay = Number.isFinite(accountInfo.buyingPower) ? `$${accountInfo.buyingPower.toFixed(2)}` : "unknown";
-              console.log(`[AutoTrade] ${symbol}: %cno buy%c — insufficient/unknown buying power (${bpDisplay} available, $${investAmount} needed)`, AUTOTRADE_LOG_GREY, "");
-              recordBotStatus(symbol, "WAIT", "#5C89B9");
-            } else {
-              await TradingAPI.buy(symbol, investAmount);
-              tradedThisCycle = true;
-              console.log(`[AutoTrade] ${symbol}: %cBOUGHT%c ($${investAmount})`, AUTOTRADE_LOG_GREEN, "");
-              recordBotStatus(symbol, "HELD", "#F5F3EF");
-            }
-          } else {
-            console.log(`[AutoTrade] ${symbol}: %cno buy%c — correctly not owning`, AUTOTRADE_LOG_GREY, "");
-            recordBotStatus(symbol, "WAIT - GREEN", "#5C89B9");
-          }
-        } catch (err) {
-          console.error(`[AutoTrade] ${symbol}: buy evaluation/execution failed — no action taken.`, err);
         }
       }
 
@@ -3956,10 +3688,11 @@
     // This deliberately does not smooth or filter chop — on a choppy stretch the bars will flip
     // color often, because price is actually doing that. Chop is a read on the market, not a
     // flaw to average away here.
-    // This intentionally replaces the old plain close-vs-SMA delta as the CHART's own signal —
-    // the real buy-trigger logic (isSymbolArmedForBuy) is untouched here and still reads its own
-    // independent close-vs-SMA delta; wiring the trigger itself to this new signal is deferred
-    // (see todo.md).
+    // This intentionally replaces the old plain close-vs-SMA delta as the CHART's own signal.
+    // (The deadband-based buy-trigger logic this comment used to contrast against —
+    // isSymbolArmedForBuy — was removed 2026-09-28; see evaluateAutomatedTrading()'s own
+    // comment. This function, buildComboOptions, is itself unused/dead — superseded by
+    // buildSplitChartOptions — left as-is otherwise.)
     const delta = close.map((c, i) => i >= 1 ? c - close[i - 1] : 0);
     const maxAbsDelta = Math.max(0.01, ...delta.map(Math.abs));
     // Small headroom only, not a compression multiplier — the reference app uses the data's own
@@ -3997,9 +3730,8 @@
       // cosmetic bug the ranges version had — the tooltip's marker dot used to always show the
       // series' base color (green) regardless of the bar's actual color, since ranges only
       // affect the bar fill, not the tooltip marker; a color function drives both consistently.
-      // This is chart-display only — the real buy-trigger logic (isSymbolArmedForBuy) still
-      // reads its own independent deadbanded close-vs-SMA delta; wiring the trigger itself to
-      // this signal is deferred (see todo.md).
+      // This is chart-display only. (isSymbolArmedForBuy, referenced here previously, was
+      // removed 2026-09-28 — see evaluateAutomatedTrading()'s own comment.)
       colors: [
         ({ dataPointIndex }) => delta[dataPointIndex] >= 0 ? "#22C55E" : "#EF4444",
         "#F5F3EF",
@@ -4654,7 +4386,6 @@
       if (!t) continue;
       const status = botStatusBySymbol[t.symbol];
       const badge = document.getElementById(`compareBotStatusBadge-${id}`);
-      const deadbandBadge = document.getElementById(`compareDeadbandBadge-${id}`);
       if (badge) {
         badge.style.display = status ? "" : "none";
         if (status) {
@@ -4662,7 +4393,6 @@
           badge.style.color = status.color;
         }
       }
-      if (deadbandBadge && status) deadbandBadge.style.display = "none"; // bot-status wins, per the same fail-safe as renderCompare() itself
     }
   }
 
@@ -4711,8 +4441,7 @@
           <p class="compare-tile-title" style="display:flex; align-items:baseline; justify-content:space-between; gap:8px;"><span><span class="held-dot" id="compareHeldDot-${id}" style="display:none;"></span><span id="compareTitleSym-${id}">${t.symbol}</span> <span style="color:var(--muted); font-weight:400;">${t.name || ""}</span></span><span id="compareHeldGain-${id}" style="display:none; font-weight:700; font-size:13px; white-space:nowrap;"></span></p>
           <div id="compareChart-${id}"></div>
           <div id="compareChartBars-${id}" style="margin-top:-15px;"></div>
-          <span class="deadband-override-badge" id="compareDeadbandBadge-${id}" style="display:none;"></span>
-          <span class="deadband-override-badge" id="compareBotStatusBadge-${id}" style="display:none;"></span>
+          <span class="compare-corner-badge" id="compareBotStatusBadge-${id}" style="display:none;"></span>
           <p style="text-align:right; font-size:13px; margin:0 0 4px; color:var(--muted);" id="compareTheoGain-${id}"></p>
           ${tradeButtons}
         </div>`;
@@ -4756,12 +4485,10 @@
         compareChartsBars[id].render();
       }
 
-      // Deadband override badge — chart display only, purely informational, no click handler.
-      // Shows the actual override value, not just a generic "on" flag, since the number itself
-      // is what determines how to read the bar colors underneath it.
-      // Bot-status badge shares this exact same corner deliberately (confirmed: the two won't
-      // realistically coexist for the same symbol) — as a fail-safe should they ever both apply
-      // at once, bot-status wins and the deadband badge is hidden underneath it.
+      // Bot-status badge — chart display only, bottom corner of the tile. (Used to share this
+      // corner with a deadband-override badge, hidden underneath whenever bot-status was also
+      // showing; that badge and the whole deadband-override mechanism were removed 2026-09-28
+      // — see evaluateAutomatedTrading()'s own comment.)
       const botStatus = autoTradeEnabledIds.has(id) ? botStatusBySymbol[t.symbol] : null;
       const botStatusBadge = document.getElementById(`compareBotStatusBadge-${id}`);
       if (botStatusBadge) {
@@ -4770,12 +4497,6 @@
           botStatusBadge.textContent = botStatus.state;
           botStatusBadge.style.color = botStatus.color;
         }
-      }
-      const deadbandBadge = document.getElementById(`compareDeadbandBadge-${id}`);
-      if (deadbandBadge) {
-        const isOverridden = getDeadbandOverrideSymbols().includes(t.symbol.toUpperCase());
-        deadbandBadge.style.display = (isOverridden && !botStatus) ? "" : "none";
-        if (isOverridden) deadbandBadge.textContent = formatDeadbandOverrideBadgeText();
       }
 
       // Symbol title colors green/red based on the same value the last delta bar shows —
@@ -4798,9 +4519,9 @@
 
       const pct = pctSeries[pctSeries.length - 1];
 
-      // Theoretical-gain label — same deadband resolution buildComboOptions() itself uses for
-      // the bar colors, so this matches what's visually drawn. delta computed locally from the
-      // exact same pctSeries/smaVals already in scope for this chart — one source of truth.
+      // "Potential" label — computed from the exact same pctSeries/smaVals already in scope for
+      // this chart, one source of truth with what's visually drawn (the green/red reference
+      // lines).
       const theoGainEl = document.getElementById(`compareTheoGain-${id}`);
       if (theoGainEl) {
         // 10:00 AM -> end-of-chart endpoint delta, capped at 4:00 PM (2026-09-26), not the
@@ -5195,24 +4916,34 @@
     renderActivitySummary(); // fire-and-forget — independent of currently-held positions, so it
                               // still shows today's completed activity even if everything already closed out
 
-    // One unified table: every bolt-enabled symbol, held or not — not just currently-held
-    // positions. Strictly bolt-enabled, deliberately not a union with all held positions: a
-    // manually-bought position outside the bot's own control is an accepted, rare edge case,
-    // not something this table is designed to also surface. Alphabetical order (not held-first)
-    // — reasonable at the current watchlist size (a handful of symbols), worth revisiting only
-    // if the list ever grows enough that scanning alphabetically stops being fast.
-    const botSymbols = [...autoTradeEnabledIds]
+    // One unified table: every bolt-enabled symbol, held or not, UNION every currently-held
+    // position, bolt-enabled or not (2026-09-27: changed from bolt-enabled-only, per user — v2
+    // is being manually traded from Research right now with the master switch off and nothing
+    // bolt-enabled, so the old bolt-enabled-only filter meant real held positions just didn't
+    // show up here at all). A symbol held outside the bot's own control (manually bought, bot
+    // off) still gets a row; its Bot column just reads "—" since botStatusBySymbol only ever
+    // gets populated for bolt-enabled symbols. A symbol bought via Research that isn't even on
+    // the watchlist also gets a row — falls back to a synthetic {id: symbol, symbol} since
+    // there's no TICKERS entry to look up. Alphabetical order (not held-first) — reasonable at
+    // the current watchlist size (a handful of symbols), worth revisiting only if the list ever
+    // grows enough that scanning alphabetically stops being fast.
+    const botTickers = [...autoTradeEnabledIds]
       .map(id => TICKERS.find(t => t.id === id))
-      .filter(Boolean)
+      .filter(Boolean);
+    const botSymbolSet = new Set(botTickers.map(t => t.symbol));
+    const heldOnlyTickers = [...heldPositions.keys()]
+      .filter(sym => !botSymbolSet.has(sym))
+      .map(sym => TICKERS.find(t => t.symbol === sym) || { id: sym, symbol: sym });
+    const allTickers = [...botTickers, ...heldOnlyTickers]
       .sort((a, b) => a.symbol.localeCompare(b.symbol));
 
-    if (botSymbols.length === 0) {
-      panel.innerHTML = "<p class='metric-sub'>No symbols are bolt-enabled.</p>";
+    if (allTickers.length === 0) {
+      panel.innerHTML = "<p class='metric-sub'>No open positions, and no symbols are bolt-enabled.</p>";
       renderStatCards(buildBotSwitchStatusCards());
       return;
     }
 
-    const rows = botSymbols.map(t => {
+    const rows = allTickers.map(t => {
       const p = heldPositions.get(t.symbol);
       const status = botStatusBySymbol[t.symbol];
       if (!p) return { id: t.id, symbol: t.symbol, held: false, status };
@@ -5541,6 +5272,7 @@
     const panel = document.getElementById("researchPanel");
     const titleEl = document.getElementById("viewTitle");
     const subEl = document.getElementById("viewSub");
+    const mySeq = ++researchRenderSeq;
 
     if (!researchSymbol) {
       titleEl.textContent = "Enter a symbol";
@@ -5559,6 +5291,10 @@
     } catch (err) {
       loadError = err;
     }
+
+    // A newer call (a later Apply, or the auto-refresh tick re-firing while this fetch was
+    // still in flight) has already taken over — don't let this stale response paint anything.
+    if (mySeq !== researchRenderSeq) return;
 
     if (loadError) {
       titleEl.textContent = researchSymbol;
@@ -5592,7 +5328,7 @@
 
     let container = document.getElementById("researchChart");
     if (!container) {
-      panel.innerHTML = `<div style="position:relative;"><div id="researchChart"></div><span class="deadband-override-badge" id="researchDeadbandBadge" style="display:none;"></span></div><div id="researchChartBars" style="margin-top:-15px;"></div><p style="text-align:right; font-size:16px; margin:4px 0 0; color:var(--muted);" id="researchTheoGain"</p>`;
+      panel.innerHTML = `<div style="position:relative;"><div id="researchChart"></div><div id="researchChartBars" style="margin-top:-15px;"></div></div><p style="text-align:right; font-size:16px; margin:4px 0 0; color:var(--muted);" id="researchTheoGain"></p>`;
       container = document.getElementById("researchChart");
     }
     const barsContainer = document.getElementById("researchChartBars");
@@ -5605,14 +5341,6 @@
       researchChart.render();
       researchChartBars = new ApexCharts(barsContainer, barsOpts);
       researchChartBars.render();
-    }
-
-    // Same badge pattern as Compare — chart display only, shows the actual override value.
-    const researchDeadbandBadge = document.getElementById("researchDeadbandBadge");
-    if (researchDeadbandBadge) {
-      const isOverridden = getDeadbandOverrideSymbols().includes(researchSymbol.toUpperCase());
-      researchDeadbandBadge.style.display = isOverridden ? "" : "none";
-      if (isOverridden) researchDeadbandBadge.textContent = formatDeadbandOverrideBadgeText();
     }
 
     // Same 10:00 AM -> end-of-chart badge as Compare, same reasoning — see
@@ -5672,12 +5400,9 @@
     const base = data.close[0];
     const pctSeries = data.close.map(c => ((c - base) / base) * 100);
     const smaVals = data.sma.map(v => ((v - base) / base) * 100);
-    const isOverridden = getDeadbandOverrideSymbols().includes(researchSymbol.toUpperCase());
-    const posDeadband = isOverridden ? CONFIG.autoTrading.deadbandOverridePct : CONFIG.autoTrading.deadbandPct;
-    const negDeadband = isOverridden ? getEffectiveOverrideNegDeadbandMagnitude() : getEffectiveNegDeadband();
     const deltaSeries = pctSeries.map((c, i) => c - smaVals[i]);
     const timesLabel = data.times.map(t => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }));
-    console.log(`[Research dump] ${researchSymbol} | tf=${currentTf} | posDeadband=${posDeadband} | negDeadband=${negDeadband}`, {
+    console.log(`[Research dump] ${researchSymbol} | tf=${currentTf}`, {
       times: data.times,
       timesLabel,
       rawClose: data.close,
@@ -5687,8 +5412,6 @@
       delta: deltaSeries,
       settings: {
         smaPeriod: CONFIG.smaPeriod,
-        deadbandPct: CONFIG.autoTrading.deadbandPct,
-        deadbandNegPct: getEffectiveNegDeadband(),
         startHmm: CONFIG.autoTrading.startHmm,
         endHmm: CONFIG.autoTrading.endHmm,
         maxLossPct: CONFIG.autoTrading.maxLossPct,
@@ -6148,11 +5871,6 @@
   const autoTradeInvestDollars = document.getElementById("autoTradeInvestDollars");
   const autoTradeMaxLossPct = document.getElementById("autoTradeMaxLossPct");
   const autoTradeMaxLossPctMorning = document.getElementById("autoTradeMaxLossPctMorning");
-  const autoTradeDeadbandPct = document.getElementById("autoTradeDeadbandPct");
-  const autoTradeDeadbandNegPct = document.getElementById("autoTradeDeadbandNegPct");
-  const autoTradeDeadbandOverrideSymbols = document.getElementById("autoTradeDeadbandOverrideSymbols");
-  const autoTradeDeadbandOverridePct = document.getElementById("autoTradeDeadbandOverridePct");
-  const autoTradeDeadbandOverrideNegPct = document.getElementById("autoTradeDeadbandOverrideNegPct");
   const autoTradeMaxGainCap = document.getElementById("autoTradeMaxGainCap");
   const autoTradeMaxLossCap = document.getElementById("autoTradeMaxLossCap");
   const autoTradeGainPausePct = document.getElementById("autoTradeGainPausePct");
@@ -6180,11 +5898,6 @@
     autoTradeInvestDollars.value = CONFIG.autoTrading.investDollars;
     autoTradeMaxLossPct.value = CONFIG.autoTrading.maxLossPct;
     autoTradeMaxLossPctMorning.value = CONFIG.autoTrading.maxLossPctMorning;
-    autoTradeDeadbandPct.value = CONFIG.autoTrading.deadbandPct;
-    autoTradeDeadbandNegPct.value = CONFIG.autoTrading.deadbandNegPct;
-    autoTradeDeadbandOverrideSymbols.value = CONFIG.autoTrading.deadbandOverrideSymbols;
-    autoTradeDeadbandOverridePct.value = CONFIG.autoTrading.deadbandOverridePct;
-    autoTradeDeadbandOverrideNegPct.value = CONFIG.autoTrading.deadbandOverrideNegPct; // NaN → empty, same pattern as gainPauseNegPct/dayTrailDollars above
     autoTradeMaxGainCap.value = CONFIG.autoTrading.maxGainCapDollars;
     autoTradeMaxLossCap.value = CONFIG.autoTrading.maxLossCapDollars;
     // NaN assigned to a number input's .value just renders as empty — same pattern trailingPct
@@ -6318,7 +6031,7 @@
     // (restoring a stale value from localStorage that never touched this dialog at all).
     const fieldsToValidate = [
       autoTradeStartHmm, autoTradeEndHmm, autoTradeInvestDollars, autoTradeMaxLossPct,
-      autoTradeDeadbandPct, autoTradeDeadbandNegPct, autoTradeEvalSecond, autoTradeMaxGainCap, autoTradeMaxLossCap, autoTradeGainPausePct, autoTradeGainPauseNegPct, autoTradeDayTrailDollars, autoTradeDeadbandOverrideNegPct
+      autoTradeEvalSecond, autoTradeMaxGainCap, autoTradeMaxLossCap, autoTradeGainPausePct, autoTradeGainPauseNegPct, autoTradeDayTrailDollars
     ];
     for (const field of fieldsToValidate) {
       if (!field.checkValidity()) {
@@ -6364,22 +6077,8 @@
     // the meaningful action ("go back to using the default value in the morning too").
     const parsedMaxLossMorning = parseFloat(autoTradeMaxLossPctMorning.value);
     CONFIG.autoTrading.maxLossPctMorning = Number.isFinite(parsedMaxLossMorning) ? Math.min(0, parsedMaxLossMorning) : NaN;
-    const parsedDeadband = parseFloat(autoTradeDeadbandPct.value);
-    CONFIG.autoTrading.deadbandPct = Number.isFinite(parsedDeadband) ? Math.min(10, Math.max(0, parsedDeadband)) : CONFIG.autoTrading.deadbandPct;
-    // Unlike every other field here, an empty/unparseable value is NOT ignored in favor of
-    // whatever was previously saved — it's saved AS NaN deliberately, since clearing this
-    // field is itself the meaningful action ("go back to using the positive-side value"),
-    // not a typo to fall back from.
-    const parsedNegDeadband = parseFloat(autoTradeDeadbandNegPct.value);
-    CONFIG.autoTrading.deadbandNegPct = Number.isFinite(parsedNegDeadband) ? Math.min(10, Math.max(0, parsedNegDeadband)) : NaN;
-    CONFIG.autoTrading.deadbandOverrideSymbols = autoTradeDeadbandOverrideSymbols.value;
-    const parsedOverridePct = parseFloat(autoTradeDeadbandOverridePct.value);
-    CONFIG.autoTrading.deadbandOverridePct = Number.isFinite(parsedOverridePct) ? Math.min(10, Math.max(0, parsedOverridePct)) : CONFIG.autoTrading.deadbandOverridePct;
-    // Signed convention (like gainPauseNegPct/dayTrailDollars) — Math.min(0, ...) clamps to
-    // non-positive without touching magnitude. Empty/unparseable is saved AS NaN deliberately,
-    // same reasoning as deadbandNegPct above — clearing it is the meaningful action.
-    const parsedOverrideNegPct = parseFloat(autoTradeDeadbandOverrideNegPct.value);
-    CONFIG.autoTrading.deadbandOverrideNegPct = Number.isFinite(parsedOverrideNegPct) ? Math.min(0, parsedOverrideNegPct) : NaN;
+    // Deadband pos/neg + override fields removed 2026-09-28 — see CONFIG.autoTrading's own
+    // comment.
     const parsedMaxGainCap = parseFloat(autoTradeMaxGainCap.value);
     CONFIG.autoTrading.maxGainCapDollars = Number.isFinite(parsedMaxGainCap) ? Math.min(10000, Math.max(0, parsedMaxGainCap)) : CONFIG.autoTrading.maxGainCapDollars;
     const parsedMaxLossCap = parseFloat(autoTradeMaxLossCap.value);
@@ -6695,7 +6394,7 @@
       // run it. Only resets the activation switches themselves (master switch, which symbols
       // are enabled, and any in-progress day-cap lockout, which would otherwise show as active
       // on a device that never actually triggered it). Leaves the numeric configuration — HMM
-      // window, invest $, deadband, both caps, eval second — untouched, since those are inert
+      // window, invest $, both caps, eval second — untouched, since those are inert
       // on their own without the master switch on, and worth keeping for a backup or a
       // replacement workhorse device.
       if (parsed.autoTrading && typeof parsed.autoTrading === "object") {
