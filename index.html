@@ -1610,7 +1610,7 @@
         <a href="#" id="importSettings" style="color:var(--muted); text-decoration:underline; margin-left:6px;">Import settings</a>
         <a href="#" id="resetSavedData" style="color:var(--muted); text-decoration:underline; margin-left:6px;">Reset saved data</a>
       </p>
-      <p style="color:var(--muted); font-size:11px; margin-top:6px;">V201</p>
+      <p style="color:var(--muted); font-size:11px; margin-top:6px;">V202</p>
     </div>
   </div>
 
@@ -5328,7 +5328,14 @@
 
     let container = document.getElementById("researchChart");
     if (!container) {
-      panel.innerHTML = `<div style="position:relative;"><div id="researchChart"></div><div id="researchChartBars" style="margin-top:-15px;"></div></div><p style="text-align:right; font-size:16px; margin:4px 0 0; color:var(--muted);" id="researchTheoGain"></p>`;
+      // Bottom-left/bottom-right pair, same row: the held/session gain figure on the left,
+      // the existing Potential badge on the right — moved here (2026-09-29) from the header's
+      // top-right corner per user feedback ("it is there now, just not where i expected...
+      // move it to the bottom left (of the potential)"). Living inside this same template
+      // (rebuilt once per symbol, just like researchTheoGain already was) means it inherits
+      // the same persistence as the Potential text — no separate viewMeta/cache plumbing
+      // needed, unlike the header-corner version this replaced.
+      panel.innerHTML = `<div style="position:relative;"><div id="researchChart"></div><div id="researchChartBars" style="margin-top:-15px;"></div></div><div style="display:flex; justify-content:space-between; align-items:baseline; margin:4px 0 0;"><span style="font-size:16px; font-weight:700;" id="researchHeldGain"></span><p style="text-align:right; font-size:16px; margin:0; color:var(--muted);" id="researchTheoGain"></p></div>`;
       container = document.getElementById("researchChart");
     }
     const barsContainer = document.getElementById("researchChartBars");
@@ -5354,6 +5361,35 @@
       } else {
         researchTheoGainEl.textContent = "Potential: " + arrowPrefix(theoGainPct) + round2(Math.abs(theoGainPct)).toFixed(2) + "%";
         researchTheoGainEl.style.color = signColor(theoGainPct);
+      }
+    }
+
+    // Same "dollar gain | position %" (held) / "session % | vs. previous close %" (not held)
+    // figure Compare's tiles show — see compareHeldGain-${id} for the original, this is the
+    // same computation against researchSymbol instead of a watchlist id. Bottom-left, same row
+    // as the Potential badge above (moved here 2026-09-29 from the header's top-right corner).
+    const heldGainEl = document.getElementById("researchHeldGain");
+    if (heldGainEl) {
+      const heldNow = !selectedDate && heldPositions.has(researchSymbol);
+      if (heldNow) {
+        const { dollar, pct: posPct } = heldPositions.get(researchSymbol);
+        heldGainEl.style.color = signColor(dollar);
+        heldGainEl.innerHTML = signPrefix(dollar) + round2(dollar).toFixed(2) + " | " + signPrefix(posPct) + round2(posPct).toFixed(2) + "%";
+      } else {
+        const sessionPct = pctSeries[pctSeries.length - 1];
+        heldGainEl.style.color = "#5C89B9";
+        let html = arrowPrefix(sessionPct) + round2(Math.abs(sessionPct)).toFixed(2) + "%";
+        if (CONFIG.dataMode === "sample") {
+          html += ` | <span style="color:#4FD1C5;">-</span>`;
+        } else {
+          const prevClose = CONFIG.autoTrading.previousClosePrices[researchSymbol];
+          const currentPrice = data.close[data.close.length - 1];
+          if (Number.isFinite(prevClose) && prevClose > 0 && Number.isFinite(currentPrice)) {
+            const prevClosePct = ((currentPrice - prevClose) / prevClose) * 100;
+            html += ` | <span style="color:#4FD1C5;">${arrowPrefix(prevClosePct)}${round2(Math.abs(prevClosePct)).toFixed(2)}%</span>`;
+          }
+        }
+        heldGainEl.innerHTML = html;
       }
     }
 
