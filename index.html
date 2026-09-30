@@ -1561,6 +1561,16 @@
         </div>
         <div style="display:flex; align-items:center; gap:12px;">
           <p class="metric-title" id="viewTitle">Combined</p>
+          <!-- Research-only: currently-held position's dollar gain | position % for the
+               researched symbol, colored green/red the same way Compare's own held-position
+               figure is (compareHeldGain-${id}) — empty (not just hidden) when the symbol
+               isn't currently held, per the user's own screenshot/ask (2026-09-29): "show the
+               position gain/percent for the selected symbol. colored and using the indicator.
+               empty if not held." Sits between the title and the buy/sell buttons, filling the
+               gap the user circled. Lives in the shared title row (not the panel below), so —
+               like compareOverallPotential — its HTML is cached/restored via viewMeta so a
+               cache-hit re-render doesn't blank it. -->
+          <span id="researchHeldPositionGain" style="display:none; flex:1; text-align:right; font-weight:700; font-size:15px; white-space:nowrap;"></span>
           <!-- Research-only: buy/sell for the currently-researched symbol, right next to the
                title so it's usable at a glance while running several Research windows side by
                side (2026-09-27). Hidden on every other view, same toggle pattern as
@@ -1610,7 +1620,7 @@
         <a href="#" id="importSettings" style="color:var(--muted); text-decoration:underline; margin-left:6px;">Import settings</a>
         <a href="#" id="resetSavedData" style="color:var(--muted); text-decoration:underline; margin-left:6px;">Reset saved data</a>
       </p>
-      <p style="color:var(--muted); font-size:11px; margin-top:6px;">V202</p>
+      <p style="color:var(--muted); font-size:11px; margin-top:6px;">V203</p>
     </div>
   </div>
 
@@ -5280,6 +5290,8 @@
       if (researchChart) { try { researchChart.destroy(); } catch (e) {} researchChart = null; }
       if (researchChartBars) { try { researchChartBars.destroy(); } catch (e) {} researchChartBars = null; }
       panel.innerHTML = "<p class='metric-sub'>Search for a symbol above to see its chart.</p>";
+      const noSymbolGainEl = document.getElementById("researchHeldPositionGain");
+      if (noSymbolGainEl) noSymbolGainEl.innerHTML = "";
       renderStatCards([]);
       return;
     }
@@ -5302,6 +5314,8 @@
       if (researchChart) { try { researchChart.destroy(); } catch (e) {} researchChart = null; }
       if (researchChartBars) { try { researchChartBars.destroy(); } catch (e) {} researchChartBars = null; }
       panel.innerHTML = `<p class="metric-sub">Couldn't load data for "${researchSymbol}": ${loadError.message}</p>`;
+      const errGainEl = document.getElementById("researchHeldPositionGain");
+      if (errGainEl) errGainEl.innerHTML = "";
       renderStatCards([]);
       return;
     }
@@ -5314,12 +5328,30 @@
       if (researchChart) { try { researchChart.destroy(); } catch (e) {} researchChart = null; }
       if (researchChartBars) { try { researchChartBars.destroy(); } catch (e) {} researchChartBars = null; }
       panel.innerHTML = `<p class="metric-sub">No data found for "${researchSymbol}" — check the symbol and try again.</p>`;
+      const noDataGainEl = document.getElementById("researchHeldPositionGain");
+      if (noDataGainEl) noDataGainEl.innerHTML = "";
       renderStatCards([]);
       return;
     }
 
     titleEl.textContent = researchSymbol;
     subEl.textContent = "% change from session start, " + tfLabel();
+
+    // Currently-held position's dollar gain | position % — empty (not a placeholder) when the
+    // researched symbol isn't currently held. Same colors/format as compareHeldGain-${id}'s
+    // held branch; unlike the bottom-left session/prevClose box, this one has nothing to show
+    // when not held, by design (2026-09-29 ask).
+    const heldPosGainEl = document.getElementById("researchHeldPositionGain");
+    if (heldPosGainEl) {
+      const heldNow = !selectedDate && heldPositions.has(researchSymbol);
+      if (heldNow) {
+        const { dollar, pct: posPct } = heldPositions.get(researchSymbol);
+        heldPosGainEl.style.color = signColor(dollar);
+        heldPosGainEl.innerHTML = signPrefix(dollar) + round2(dollar).toFixed(2) + " | " + signPrefix(posPct) + round2(posPct).toFixed(2) + "%";
+      } else {
+        heldPosGainEl.innerHTML = "";
+      }
+    }
 
     const base = data.close[0];
     const pctSeries = data.close.map(c => ((c - base) / base) * 100);
@@ -5514,6 +5546,7 @@
     document.getElementById("positionsJournalEcho").style.display = currentView === "positions" ? "" : "none";
     document.getElementById("researchSearchRow").style.display = currentView === "research" ? "flex" : "none";
     document.getElementById("compareOverallPotential").style.display = currentView === "compare" ? "" : "none";
+    document.getElementById("researchHeldPositionGain").style.display = currentView === "research" ? "" : "none";
     document.getElementById("researchTradeButtonsRow").style.display = currentView === "research" ? "flex" : "none";
     document.getElementById("tickerBar").classList.toggle("chips-muted", currentView === "research" || currentView === "positions" || currentView === "account");
     document.getElementById("tickerPresetRow").classList.toggle("chips-muted", currentView === "research" || currentView === "positions" || currentView === "account");
@@ -5539,6 +5572,7 @@
         document.getElementById("viewSub").textContent = meta.sub;
         document.getElementById("statRow").outerHTML = meta.statRowHTML;
         if (meta.overallPotentialHTML) document.getElementById("compareOverallPotential").outerHTML = meta.overallPotentialHTML;
+        if (meta.researchHeldPositionGainHTML) document.getElementById("researchHeldPositionGain").outerHTML = meta.researchHeldPositionGainHTML;
       }
       return; // nothing this view depends on has changed — just showing it is enough
     }
@@ -5555,7 +5589,8 @@
       title: document.getElementById("viewTitle").textContent,
       sub: document.getElementById("viewSub").textContent,
       statRowHTML: document.getElementById("statRow").outerHTML,
-      overallPotentialHTML: document.getElementById("compareOverallPotential").outerHTML
+      overallPotentialHTML: document.getElementById("compareOverallPotential").outerHTML,
+      researchHeldPositionGainHTML: document.getElementById("researchHeldPositionGain").outerHTML
     };
   }
 
